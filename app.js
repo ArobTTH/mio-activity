@@ -175,9 +175,10 @@ async function loadData() {
 const syncReady = () => !!(S.ghRepo && S.ghToken);
 async function ghApi(path, opts = {}) {
   const r = await fetch('https://api.github.com' + path, { ...opts, cache: 'no-store', headers: { Authorization: 'Bearer ' + S.ghToken, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) } });
-  if (r.status === 401) throw new Error('GitHub 令牌无效或已过期，请在设置里换一个');
-  if (r.status === 403) throw new Error('令牌没有这个权限');
-  if (r.status === 404) throw new Error('找不到数据仓库，检查仓库名，以及令牌是否勾选了这个仓库');
+  const fail = (status, msg) => { const e = new Error(msg); e.status = status; throw e; };
+  if (r.status === 401) fail(401, 'GitHub 令牌无效或已过期，请在设置里换一个');
+  if (r.status === 403) fail(403, '令牌权限不够');
+  if (r.status === 404) fail(404, '找不到数据仓库，检查仓库名，以及令牌是否选了 mio-data 这个仓库');
   if (r.status === 409) return null; // empty repository
   if (!r.ok && r.status !== 204) throw new Error('GitHub 返回错误 ' + r.status);
   return r.status === 204 ? null : r.json();
@@ -211,7 +212,8 @@ async function pullSync({ quiet = true } = {}) {
     if (!quiet) toast(days ? `已同步 ${days} 天的新轨迹` : todo.length ? '已更新活动概览' : '已经是最新的了');
     return days;
   } catch (e) {
-    if (!quiet || navigator.onLine) toast('同步失败：' + e.message);
+    const msg = e.status === 403 ? '令牌不能读取 mio-data，请给令牌加上 Contents: Read-only 权限' : e.message;
+    if (!quiet || navigator.onLine) toast('同步失败：' + msg, 8000);
     return null;
   } finally { syncing = false; }
 }
@@ -221,7 +223,12 @@ async function syncNow() {
   const since = Date.now() - 5000;
   try {
     await ghApi(`/repos/${S.ghRepo}/actions/workflows/sync.yml/dispatches`, { method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { days: '2' } }) });
-  } catch (e) { toast('没法触发同步（' + e.message + '），先读取已有数据'); return pullSync({ quiet: false }); }
+  } catch (e) {
+    if (e.status !== 403) { toast('没法触发同步（' + e.message + '），先读取已有数据'); return pullSync({ quiet: false }); }
+    const n = await pullSync({ quiet: true });
+    if (n !== null) toast('已读取最新数据。想用「同步」按钮马上从 Tractive 拉取，需要把令牌的 Actions 权限改成 Read and write', 8000);
+    return n;
+  }
   toast('正在从 Tractive 拉取，大约需要 1 分钟…', 120000);
   for (let i = 0; i < 24; i++) {
     await new Promise(r => setTimeout(r, 6000));
