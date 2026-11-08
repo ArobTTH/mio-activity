@@ -922,45 +922,9 @@ function demoPoints() {
   return pts;
 }
 
-// ---------- access password (keeps casual visitors out; the page holds no data, Mio's data lives on the phone and in the private repo) ----------
-const GATE = { salt: '2129bc8cdaa1ad710073c745835838b8', iter: 200000, hash: '552d42872ee9343101354738927c31c3d122cd1f5f80fe6f7f1751c668962d71' };
-const KEY_UNLOCK = 'mio.unlock.v1';
-const unlocked = () => { try { return localStorage.getItem(KEY_UNLOCK) === GATE.hash; } catch { return false; } };
-async function derive(pw) {
-  const salt = Uint8Array.from(GATE.salt.match(/../g), x => parseInt(x, 16));
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: GATE.iter, hash: 'SHA-256' }, key, 256);
-  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-function lockScreen() {
-  return new Promise(res => {
-    document.body.classList.add('locked');
-    root.innerHTML = `<form class="gate" id="gateForm" autocomplete="on">
-      <svg viewBox="0 0 48 48" aria-hidden="true"><g fill="currentColor"><ellipse cx="13" cy="20" rx="4.6" ry="6"/><ellipse cx="22" cy="12.5" rx="4.6" ry="6.2"/><ellipse cx="32" cy="13" rx="4.6" ry="6.2"/><ellipse cx="40" cy="21.5" rx="4.4" ry="5.8"/><path d="M26.5 23c-6.5 0-13 8.2-13 13.6 0 4.3 3.4 6.4 7 6.4 2.6 0 4-1.3 6-1.3s3.4 1.3 6 1.3c3.6 0 7-2.1 7-6.4C39.5 31.2 33 23 26.5 23z"/></g></svg>
-      <h1>Mio 运动</h1>
-      <label for="gatePw">输入访问密码</label>
-      <input id="gatePw" name="password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" required>
-      <p class="gate-err" id="gateErr" role="alert"></p>
-      <button class="btn wide" type="submit">进入</button>
-    </form>`;
-    const form = $('#gateForm'), inp = $('#gatePw'), err = $('#gateErr');
-    inp.focus();
-    form.addEventListener('submit', async e => {
-      e.preventDefault();
-      if (!window.crypto || !crypto.subtle) { err.textContent = '这个浏览器不支持密码校验，请用 Safari 打开 https 网址'; return; }
-      err.textContent = '正在校验…';
-      const ok = (await derive(inp.value.trim())) === GATE.hash;
-      if (!ok) { err.textContent = '密码不对，再试一次'; inp.select(); return; }
-      try { localStorage.setItem(KEY_UNLOCK, GATE.hash); } catch { /* remembered for this visit only */ }
-      document.body.classList.remove('locked');
-      res();
-    });
-  });
-}
-
 // ---------- boot ----------
 (async () => {
-  if (!unlocked()) await lockScreen();
+  try { localStorage.removeItem('mio.unlock.v1'); } catch { /* leftover from the removed password page */ }
   root.innerHTML = '<div class="loading">正在载入…</div>';
   const st = await DB.open();
   if (st === 'timeout') { root.innerHTML = '<div class="card empty" style="margin-top:40px"><b>数据读取卡住了。</b>这是 iPhone 上偶尔会遇到的系统问题：请从后台彻底划掉这个 App，再重新打开。数据不会丢。</div>'; return; }
