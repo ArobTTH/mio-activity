@@ -11,7 +11,8 @@ const standalone = navigator.standalone === true || matchMedia('(display-mode: s
 
 // ---------- settings ----------
 const KEY_S = 'mio.settings.v1';
-const DEFAULTS = { name: 'Mio', weight: '', goalKm: 2, goalMin: 60, goalWalks: 2, tz: '', mapProvider: 'esri', gkey: '', base: 'map', hideA2HS: false };
+const DEFAULTS = { name: 'Mio', weight: '', goalKm: 2, goalMin: 60, goalWalks: 2, tz: '', mapProvider: 'esri', gkey: '', base: 'map', hideA2HS: false, ghRepo: 'ArobTTH/mio-data', ghToken: '', lastSync: 0 };
+const KEY_SHA = 'mio.sync.shas.v1';
 const ls = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
@@ -113,7 +114,7 @@ const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(
 const isDark = () => { const th = document.documentElement.dataset.theme; return th === 'dark' || (th !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); };
 
 // ---------- data ----------
-const D = { files: [], demo: false, A: null, days: new Map(), acts: [], byId: new Map() };
+const D = { files: [], synced: [], health: new Map(), demo: false, A: null, days: new Map(), acts: [], byId: new Map() };
 const isWalk = a => a.distance >= 50 && a.vehicleTime < a.duration * 0.5;
 
 function analyze(points) {
@@ -148,15 +149,79 @@ const dayOf = key => D.days.get(key) || emptyDay(key);
 const fracs = d => [d.dist / 1000 / (+S.goalKm || 2), d.sec / 60 / (+S.goalMin || 60), d.walks.length / (+S.goalWalks || 2)];
 
 async function loadData() {
-  const recs = await DB.all();
-  if (recs.length) {
-    D.demo = false;
-    D.files = recs.map(({ pts, ...m }) => m).sort((a, b) => a.first - b.first);
-    analyze(recs.flatMap(r => unpack(r.pts)));
-  } else {
-    D.demo = true; D.files = [];
-    analyze(demoPoints());
+  const all = await DB.all();
+  const recs = all.filter(r => Array.isArray(r.pts) && r.pts.length);
+  D.health = new Map(all.filter(r => r.kind === 'health').map(r => [r.day, r]));
+  D.files = recs.filter(r => r.kind !== 'sync').map(({ pts, ...m }) => m).sort((a, b) => a.first - b.first);
+  D.synced = recs.filter(r => r.kind === 'sync').map(({ pts, ...m }) => m).sort((a, b) => a.first - b.first);
+  if (recs.length) { D.demo = false; analyze(recs.flatMap(r => unpack(r.pts))); }
+  else { D.demo = true; analyze(demoPoints()); }
+}
+
+// ---------- automatic sync from the private GitHub repo that GitHub Actions fills every hour ----------
+const syncReady = () => !!(S.ghRepo && S.ghToken);
+async function ghApi(path, opts = {}) {
+  const r = await fetch('https://api.github.com' + path, { ...opts, cache: 'no-store', headers: { Authorization: 'Bearer ' + S.ghToken, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) } });
+  if (r.status === 401) throw new Error('GitHub 令牌无效或已过期，请在设置里换一个');
+  if (r.status === 403) throw new Error('令牌没有这个权限');
+  if (r.status === 404) throw new Error('找不到数据仓库，检查仓库名，以及令牌是否勾选了这个仓库');
+  if (r.status === 409) return null; // empty repository
+  if (!r.ok && r.status !== 204) throw new Error('GitHub 返回错误 ' + r.status);
+  return r.status === 204 ? null : r.json();
+}
+const b64text = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), c => c.charCodeAt(0)));
+let syncing = false;
+async function pullSync({ quiet = true } = {}) {
+  if (!syncReady() || syncing) return null;
+  syncing = true;
+  try {
+    const tree = await ghApi(`/repos/${S.ghRepo}/git/trees/HEAD?recursive=1`);
+    const shas = ls.get(KEY_SHA) || {};
+    const todo = ((tree && tree.tree) || []).filter(e => e.type === 'blob' && /^(days|health)\/\d{4}-\d{2}-\d{2}\.json$/.test(e.path) && shas[e.path] !== e.sha);
+    let days = 0;
+    for (let i = 0; i < todo.length; i += 4) {
+      await Promise.all(todo.slice(i, i + 4).map(async e => {
+        const blob = await ghApi(`/repos/${S.ghRepo}/git/blobs/${e.sha}`);
+        const j = JSON.parse(b64text(blob.content));
+        if (e.path.startsWith('days/')) {
+          const pts = (j.points || []).filter(p => Array.isArray(p) && p.length >= 3).map(p => [p[0], p[1], p[2], p[3] ?? null, p[4] ?? null]);
+          if (pts.length) { await DB.put({ id: 'sync:' + j.day, kind: 'sync', name: 'Tractive ' + j.day, added: Date.now(), count: pts.length, creator: 'Tractive 自动同步', first: pts[0][0], last: pts[pts.length - 1][0], pts }); days++; }
+        } else {
+          await DB.put({ id: 'health:' + j.day, kind: 'health', day: j.day, fetched: j.fetched, data: j.data });
+        }
+        shas[e.path] = e.sha;
+      }));
+    }
+    ls.set(KEY_SHA, shas);
+    S.lastSync = Date.now(); saveSettings();
+    if (todo.length) { await loadData(); render(); }
+    if (!quiet) toast(days ? `已同步 ${days} 天的新轨迹` : todo.length ? '已更新活动概览' : '已经是最新的了');
+    return days;
+  } catch (e) {
+    if (!quiet || navigator.onLine) toast('同步失败：' + e.message);
+    return null;
+  } finally { syncing = false; }
+}
+// Ask GitHub Actions to fetch from Tractive right now, wait for it, then pull.
+async function syncNow() {
+  if (!syncReady()) { location.hash = '#/settings'; toast('先在设置里填好数据仓库和令牌'); return; }
+  const since = Date.now() - 5000;
+  try {
+    await ghApi(`/repos/${S.ghRepo}/actions/workflows/sync.yml/dispatches`, { method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { days: '2' } }) });
+  } catch (e) { toast('没法触发同步（' + e.message + '），先读取已有数据'); return pullSync({ quiet: false }); }
+  toast('正在从 Tractive 拉取，大约需要 1 分钟…', 120000);
+  for (let i = 0; i < 24; i++) {
+    await new Promise(r => setTimeout(r, 6000));
+    try {
+      const runs = await ghApi(`/repos/${S.ghRepo}/actions/workflows/sync.yml/runs?event=workflow_dispatch&per_page=3`);
+      const run = ((runs && runs.workflow_runs) || []).find(r => Date.parse(r.created_at) >= since);
+      if (run && run.status === 'completed') {
+        if (run.conclusion !== 'success') { toast('Tractive 同步没成功，请到 GitHub 的 Actions 页面看日志'); return; }
+        return pullSync({ quiet: false });
+      }
+    } catch { /* keep waiting */ }
   }
+  toast('同步还在进行，稍后再打开 App 就能看到');
 }
 
 // ---------- names ----------
@@ -213,10 +278,14 @@ addEventListener('hashchange', () => { navCount++; render(); scrollTo(0, 0); });
 function head(eyebrow, title, actions = '') {
   return `<header class="head"><div style="min-width:0"><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1></div><div class="acts">${actions}</div></header>`;
 }
-const importBtn = `<button class="icon-btn" type="button" data-do="import" aria-label="导入 GPX">${IC.plus}</button>`;
+const importBtnHTML = `<button class="icon-btn" type="button" data-do="import" aria-label="导入 GPX">${IC.plus}</button>`;
+const syncBtnHTML = `<button class="icon-btn" type="button" data-do="sync" aria-label="立即同步"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.6-4.5M4 4v3h3M4 13a8 8 0 0 0 14.6 4.5M20 20v-3h-3"/></svg></button>`;
+const importBtnFn = () => syncReady() ? syncBtnHTML : importBtnHTML;
 function banners() {
   let h = '';
-  if (D.demo) h += `<div class="banner"><span>这是示例数据。导入 ${esc(S.name)} 的 GPX 后会自动替换。</span><button class="btn" type="button" data-do="import">导入</button></div>`;
+  if (D.demo) h += syncReady()
+    ? `<div class="banner"><span>这是示例数据。自动同步还没拿到 ${esc(S.name)} 的数据。</span><button class="btn" type="button" data-do="sync">同步</button></div>`
+    : `<div class="banner"><span>这是示例数据。设置自动同步，或导入 ${esc(S.name)} 的 GPX 后会自动替换。</span><button class="btn" type="button" data-go="#/settings">设置</button></div>`;
   if (isIOS && !standalone && !S.hideA2HS) h += `<div class="banner"><span>点 Safari 底部的分享按钮，选「添加到主屏幕」，就能像 App 一样全屏打开。</span><button class="btn secondary" type="button" data-do="hideA2HS">知道了</button></div>`;
   return h;
 }
@@ -228,7 +297,7 @@ function viewToday(arg) {
   const d = dayOf(key), f = fracs(d);
   const title = key === tk ? '今天' : key === addDays(tk, -1) ? '昨天' : mdKey(key);
   const eyebrow = key === tk || key === addDays(tk, -1) ? `${mdKey(key)} ${wdKey(key)}` : wdKey(key);
-  const nav = `<button class="icon-btn" type="button" data-go="#/today/${addDays(key, -1)}" aria-label="前一天">${IC.left}</button><button class="icon-btn" type="button" data-go="#/today/${addDays(key, 1)}" aria-label="后一天" ${key >= tk ? 'disabled' : ''}>${IC.right}</button>${importBtn}`;
+  const nav = `<button class="icon-btn" type="button" data-go="#/today/${addDays(key, -1)}" aria-label="前一天">${IC.left}</button><button class="icon-btn" type="button" data-go="#/today/${addDays(key, 1)}" aria-label="后一天" ${key >= tk ? 'disabled' : ''}>${IC.right}</button>${importBtnFn()}`;
   // week strip
   const mon = mondayOf(key);
   let week = '<nav class="week" aria-label="本周">';
@@ -347,7 +416,7 @@ function viewHistory(arg) {
   }
   cal += '</div>';
   const seg = `<div class="seg" role="group" aria-label="指标">${[['dist', '距离'], ['min', '运动'], ['walks', '散步']].map(([k, l]) => `<button type="button" data-metric="${k}" aria-pressed="${histMetric === k}">${l}</button>`).join('')}</div>`;
-  root.innerHTML = banners() + head(`${S.name} 的记录`, '历史', importBtn) + trends +
+  root.innerHTML = banners() + head(`${S.name} 的记录`, '历史', importBtnFn()) + trends +
     `<section class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><h2>最近 30 天</h2>${seg}</div><div class="chart" id="d30"></div><div class="readout" id="d30RO">&nbsp;</div></section>` +
     `<section class="card"><div class="cal-head"><button class="icon-btn" type="button" data-go="#/history/${prevM}" aria-label="上个月">${IC.left}</button><h2>${y} 年 ${m} 月</h2><button class="icon-btn" type="button" data-go="#/history/${nextM}" aria-label="下个月" ${nextM > tk.slice(0, 7) ? 'disabled' : ''}>${IC.right}</button></div>${cal}</section>`;
   drawDays30();
@@ -394,7 +463,7 @@ function viewWalks() {
     const [y, m] = k.split('-').map(Number);
     body += `<h2 class="sec-title">${y} 年 ${m} 月<small>${list.length} 次 · ${distText(list.reduce((s, a) => s + a.distance, 0))} · ${durText(list.reduce((s, a) => s + a.movingTime, 0))}</small></h2><div class="list">${list.map(walkRow).join('')}</div>`;
   }
-  root.innerHTML = banners() + head(`${S.name} 的记录`, '运动', importBtn) + body;
+  root.innerHTML = banners() + head(`${S.name} 的记录`, '运动', importBtnFn()) + body;
 }
 
 // ---------- view: one walk ----------
@@ -626,7 +695,8 @@ async function googleMap(el, a) {
 // ---------- view: settings ----------
 function viewSettings() {
   const tzs = (() => { try { return Intl.supportedValuesOf('timeZone'); } catch { return ['Asia/Shanghai', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'UTC']; } })();
-  const fileRows = D.files.map(f => `<div class="row file"><div><div class="nm">${esc(f.name)}</div><span class="sub">${esc(mdKey(dayKey(f.first)))} ${hm(f.first)} 至 ${esc(mdKey(dayKey(f.last)))} ${hm(f.last)} · ${f.count} 个点</span></div><button type="button" data-del="${esc(f.id)}">删除</button></div>`).join('');
+  const syncRow = D.synced.length ? `<div class="row file"><div><div class="nm">Tractive 自动同步</div><span class="sub">${D.synced.length} 天 · ${esc(mdKey(D.synced[0].name.slice(-10)))} 至 ${esc(mdKey(D.synced[D.synced.length - 1].name.slice(-10)))}</span></div></div>` : '';
+  const fileRows = syncRow + D.files.map(f => `<div class="row file"><div><div class="nm">${esc(f.name)}</div><span class="sub">${esc(mdKey(dayKey(f.first)))} ${hm(f.first)} 至 ${esc(mdKey(dayKey(f.last)))} ${hm(f.last)} · ${f.count} 个点</span></div><button type="button" data-del="${esc(f.id)}">删除</button></div>`).join('');
   const steps = isIOS && !standalone ? `<div class="group notes"><p><b>装到主屏幕</b></p><ol class="steps"><li>用 Safari 打开这个页面</li><li>点底部的分享按钮（方框加向上箭头）</li><li>选「添加到主屏幕」</li></ol></div>` : '';
   root.innerHTML = head('', '设置') + steps +
     `<div class="group-title">狗狗</div><div class="group">
@@ -638,6 +708,12 @@ function viewSettings() {
       <div class="row"><label for="sMin"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--r-min);margin-right:8px"></i>运动（分钟）</label><input id="sMin" type="number" inputmode="numeric" min="5" max="600" step="5" value="${esc(S.goalMin)}"></div>
       <div class="row"><label for="sWalks"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--r-walk);margin-right:8px"></i>散步（次）</label><input id="sWalks" type="number" inputmode="numeric" min="1" max="10" step="1" value="${esc(S.goalWalks)}"></div>
     </div>
+    <div class="group-title">自动同步</div><div class="group">
+      <div class="row"><label for="sRepo">数据仓库</label><input id="sRepo" autocomplete="off" spellcheck="false" autocapitalize="off" value="${esc(S.ghRepo)}" placeholder="用户名/mio-data"></div>
+      <div class="row"><label for="sTok">GitHub 令牌</label><input id="sTok" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴 github_pat_ 开头的令牌" value="${esc(S.ghToken)}"></div>
+      <div class="row"><span>立即同步<span class="sub">${S.lastSync ? '上次检查 ' + esc(mdKey(dayKey(S.lastSync))) + ' ' + hm(S.lastSync) : '还没有同步过'}</span></span><button class="btn secondary" type="button" data-do="sync">同步</button></div>
+    </div>
+    <p class="group-foot">GitHub 每小时会自动从 Tractive 拉一次数据，App 打开时自动读取。点「同步」会让它马上拉一次，大约 1 分钟。令牌只保存在这台手机上。</p>
     <div class="group-title">地图</div><div class="group">
       <div class="row"><label for="sMap">地图服务</label><select id="sMap"><option value="esri" ${S.mapProvider !== 'google' ? 'selected' : ''}>免费地图（Esri）</option><option value="google" ${S.mapProvider === 'google' ? 'selected' : ''}>Google 地图</option></select></div>
       <div class="row" id="gkeyRow" ${S.mapProvider === 'google' ? '' : 'hidden'}><label for="sGkey">Google API 密钥</label><input id="sGkey" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴 AIza 开头的密钥" value="${esc(S.gkey)}"></div>
@@ -648,16 +724,17 @@ function viewSettings() {
       ${fileRows || `<div class="row"><span class="sub" style="font-size:14px">${D.demo ? '现在显示的是示例数据，导入后自动替换' : '还没有导入文件'}</span></div>`}
     </div>
     <div class="group">
-      <div class="row"><span>备份全部数据<span class="sub">存到「文件」App 或发给自己</span></span><button class="btn secondary" type="button" data-do="backup" ${D.files.length ? '' : 'disabled'}>备份</button></div>
+      <div class="row"><span>备份全部数据<span class="sub">存到「文件」App 或发给自己</span></span><button class="btn secondary" type="button" data-do="backup" ${D.files.length || D.synced.length ? '' : 'disabled'}>备份</button></div>
       <div class="row"><span>从备份恢复</span><button class="btn secondary" type="button" data-do="restore">选择备份</button></div>
-      <div class="row"><button class="btn danger" type="button" data-do="clear" ${D.files.length ? '' : 'disabled'}>清除全部数据</button></div>
+      <div class="row"><button class="btn danger" type="button" data-do="clear" ${D.files.length || D.synced.length ? '' : 'disabled'}>清除全部数据</button></div>
     </div>
     <p class="group-foot">${DB.ok() ? '数据只保存在这台设备上，不会上传。' : '这个浏览器不允许保存数据（可能是无痕模式），关掉页面后数据会丢失。'}</p>
     <div class="group-title">显示</div><div class="group">
       <div class="row"><label for="sTz">时区</label><select id="sTz"><option value="">跟随手机（${esc(sysTz)}）</option>${tzs.map(z => `<option value="${esc(z)}" ${S.tz === z ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select></div>
     </div>
     <div class="group-title">说明</div><div class="group notes">
-      <p><b>怎么拿到 GPX：</b>用 Safari 打开 Tractive 网页版，在历史轨迹里选好日期导出 GPX，文件会存到「文件」App 的下载里，再回这里点右上角的 + 导入。可以一次选多个文件，重复导入同一天也没关系。</p>
+      <p><b>自动同步（推荐）：</b>GitHub 上的私有仓库 mio-data 每小时自动从 Tractive 拉取数据，填好上面的仓库和令牌后，打开 App 就是最新的。</p>
+      <p><b>手动导入 GPX：</b>用 Safari 打开 Tractive 网页版，在历史轨迹里选好日期导出 GPX，文件会存到「文件」App 的下载里，再回这里点右上角的 + 导入。可以一次选多个文件，重复导入同一天也没关系。</p>
       <p><b>三个圆环：</b>外圈是距离，中间是运动分钟（检测到移动的时间），内圈是散步次数。</p>
       <p><b>采样决定细节：</b>Tractive 平时约 10 分钟定位一次，只有 LIVE 模式下才 2 到 4 秒记录一次。距离、速度、分段主要来自 LIVE 记录，所以遛狗时记得打开 LIVE。</p>
       <p><b>漂移过滤：</b>静止时 GPS 也会在几十米内跳动，这些漂移不计入距离。持续超过 32 km/h 的路段视为乘车。</p>
@@ -669,6 +746,8 @@ function viewSettings() {
   num('sKm', 'goalKm', 0.1, 50); num('sMin', 'goalMin', 5, 600); num('sWalks', 'goalWalks', 1, 10);
   $('#sMap').addEventListener('change', e => { S.mapProvider = e.target.value; saveSettings(); $('#gkeyRow').hidden = S.mapProvider !== 'google'; if (S.mapProvider === 'google' && !S.gkey) $('#sGkey').focus(); });
   $('#sGkey').addEventListener('change', e => { S.gkey = e.target.value.trim(); saveSettings(); gmPromise = null; });
+  $('#sRepo').addEventListener('change', e => { S.ghRepo = e.target.value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''); e.target.value = S.ghRepo; saveSettings(); try { localStorage.removeItem(KEY_SHA); } catch { /* ignore */ } });
+  $('#sTok').addEventListener('change', e => { S.ghToken = e.target.value.trim(); saveSettings(); if (syncReady()) pullSync({ quiet: false }); });
   $('#sTz').addEventListener('change', e => { S.tz = e.target.value; saveSettings(); resetTz(); computeDays(); });
   root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
     const f = D.files.find(x => x.id === b.dataset.del); if (!f) return;
@@ -718,7 +797,7 @@ async function importFiles(files) {
 }
 async function backup() {
   const recs = await DB.all();
-  const { gkey, ...rest } = S;
+  const { gkey, ghToken, ...rest } = S;
   const json = JSON.stringify({ app: 'mio-activity', v: 1, exported: Date.now(), settings: rest, files: recs });
   const name = `${S.name}-运动备份-${todayKey()}.json`;
   const blob = new Blob([json], { type: 'application/json' });
@@ -735,7 +814,7 @@ async function restore(file, text) {
     if (j.app !== 'mio-activity' || !Array.isArray(j.files)) throw new Error('不是这个 App 的备份文件');
     let n = 0;
     for (const r of j.files) if (r && r.id && Array.isArray(r.pts)) { await DB.put(r); n++; }
-    if (j.settings && typeof j.settings === 'object') { const keep = S.gkey; S = { ...DEFAULTS, ...S, ...j.settings, gkey: keep }; saveSettings(); resetTz(); }
+    if (j.settings && typeof j.settings === 'object') { const keep = S.gkey, tok = S.ghToken; S = { ...DEFAULTS, ...S, ...j.settings, gkey: keep, ghToken: tok }; saveSettings(); resetTz(); }
     await loadData(); render(); toast(`已恢复 ${n} 个文件`);
   } catch (e) { toast('恢复失败：' + e.message); }
 }
@@ -749,8 +828,9 @@ document.addEventListener('click', async e => {
   if (act === 'import') fileIn.click();
   else if (act === 'restore') restoreIn.click();
   else if (act === 'backup') backup();
+  else if (act === 'sync') syncNow();
   else if (act === 'hideA2HS') { S.hideA2HS = true; saveSettings(); render(); }
-  else if (act === 'clear') { if (await confirmBox('清除这台设备上的全部导入数据？建议先备份。')) { await DB.clear(); await loadData(); render(); toast('已清除，现在显示示例数据'); } }
+  else if (act === 'clear') { if (await confirmBox('清除这台设备上的全部导入数据？建议先备份。')) { await DB.clear(); try { localStorage.removeItem(KEY_SHA); } catch { /* ignore */ } await loadData(); render(); toast('已清除，现在显示示例数据'); } }
 });
 
 // ---------- toast & tip ----------
@@ -821,6 +901,8 @@ function demoPoints() {
   if (st === 'timeout') { root.innerHTML = '<div class="card empty" style="margin-top:40px"><b>数据读取卡住了。</b>这是 iPhone 上偶尔会遇到的系统问题：请从后台彻底划掉这个 App，再重新打开。数据不会丢。</div>'; return; }
   try { await loadData(); } catch (e) { root.innerHTML = `<div class="card empty">数据读取失败：${esc(e.message)}</div>`; return; }
   render();
+  pullSync();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - (S.lastSync || 0) > 5 * 60e3) pullSync(); });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
 })();
