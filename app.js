@@ -144,9 +144,17 @@ function computeDays() {
   }
   D.days = days;
 }
-const hasData = key => { const d = D.days.get(key); return !!d && d.cover.some(x => x > 0); };
+const hasData = key => { const d = D.days.get(key); return (!!d && d.cover.some(x => x > 0)) || D.health.has(key); };
+function tractiveOf(key) {
+  const r = D.health.get(key), a = r && r.data && r.data.activity;
+  if (!a || a.minutesActive == null) return null;
+  const s = r.data.sleep || {};
+  const hourly = Array.isArray(a.hourlyDistribution) && a.hourlyDistribution.length === 24 ? a.hourlyDistribution.map(x => +x || 0) : null;
+  return { active: +a.minutesActive || 0, goal: +a.minutesGoal || null, hourly, night: s.minutesNightSleep, nap: s.minutesDaySleep, calm: s.minutesCalm, synced: Date.parse(r.data.activityDataSyncedAt) || r.fetched };
+}
+const actMin = d => { const t = tractiveOf(d.key); return t ? t.active : d.sec / 60; };
 const dayOf = key => D.days.get(key) || emptyDay(key);
-const fracs = d => [d.dist / 1000 / (+S.goalKm || 2), d.sec / 60 / (+S.goalMin || 60), d.walks.length / (+S.goalWalks || 2)];
+const fracs = d => [d.dist / 1000 / (+S.goalKm || 2), actMin(d) / (+S.goalMin || 60), d.walks.length / (+S.goalWalks || 2)];
 
 async function loadData() {
   const all = await DB.all();
@@ -154,6 +162,11 @@ async function loadData() {
   D.health = new Map(all.filter(r => r.kind === 'health').map(r => [r.day, r]));
   D.files = recs.filter(r => r.kind !== 'sync').map(({ pts, ...m }) => m).sort((a, b) => a.first - b.first);
   D.synced = recs.filter(r => r.kind === 'sync').map(({ pts, ...m }) => m).sort((a, b) => a.first - b.first);
+  if (!S.goalMinCustom) {
+    const latest = [...D.health.values()].sort((a, b) => (b.fetched || 0) - (a.fetched || 0))[0];
+    const g = latest && latest.data && latest.data.activity && +latest.data.activity.minutesGoal;
+    if (g > 0 && g !== S.goalMin) { S.goalMin = g; saveSettings(); }
+  }
   if (recs.length) { D.demo = false; analyze(recs.flatMap(r => unpack(r.pts))); }
   else { D.demo = true; analyze(demoPoints()); }
 }
@@ -294,7 +307,7 @@ function banners() {
 function viewToday(arg) {
   const tk = todayKey();
   const key = arg && /^\d{4}-\d{2}-\d{2}$/.test(arg) ? arg : tk;
-  const d = dayOf(key), f = fracs(d);
+  const d = dayOf(key), f = fracs(d), tr = tractiveOf(key);
   const title = key === tk ? '今天' : key === addDays(tk, -1) ? '昨天' : mdKey(key);
   const eyebrow = key === tk || key === addDays(tk, -1) ? `${mdKey(key)} ${wdKey(key)}` : wdKey(key);
   const nav = `<button class="icon-btn" type="button" data-go="#/today/${addDays(key, -1)}" aria-label="前一天">${IC.left}</button><button class="icon-btn" type="button" data-go="#/today/${addDays(key, 1)}" aria-label="后一天" ${key >= tk ? 'disabled' : ''}>${IC.right}</button>${importBtnFn()}`;
@@ -310,9 +323,9 @@ function viewToday(arg) {
   const metric = (i, label, val, goal) => `<div class="metric"><div class="k"><i style="background:${['var(--r-dist)', 'var(--r-min)', 'var(--r-walk)'][i]}"></i>${label} ${Math.round(f[i] * 100)}%</div><div class="v">${val}<small>/ ${goal}</small></div></div>`;
   const ringsCard = `<section class="card" aria-label="今日目标"><div class="summary">${ringsSVG(f, 172, 20, 3, 'rings')}<div class="metrics">
       ${metric(0, '距离', (d.dist / 1000).toFixed(2), g.km + ' km')}
-      ${metric(1, '运动', Math.round(d.sec / 60), g.min + ' 分钟')}
+      ${metric(1, '活动', Math.round(actMin(d)), g.min + ' 分钟')}
       ${metric(2, '散步', d.walks.length, g.w + ' 次')}
-    </div></div>${hasData(key) ? '' : `<p class="hint" style="margin:12px 0 0">这一天还没有定位数据。</p>`}</section>`;
+    </div></div>${tr ? `<p class="hint" style="margin:12px 0 0">活动分钟来自 Tractive 项圈传感器，更新于 ${hm(tr.synced)}</p>` : hasData(key) ? '' : `<p class="hint" style="margin:12px 0 0">这一天还没有数据。</p>`}</section>`;
   // stats
   const [t0, t1] = [dayStart(key), dayStart(addDays(key, 1))];
   const sum = hasData(key) ? E.summarize(D.A, t0, t1) : null;
@@ -326,8 +339,14 @@ function viewToday(arg) {
     </div></section>`;
   const walks = d.acts.slice().sort((a, b) => a.start - b.start);
   root.innerHTML = banners() + head(eyebrow, title, nav) + week + ringsCard +
-    `<section class="card"><h2>活动时间分布</h2><p class="hint">每小时检测到移动的分钟数，下方色条是定位记录的情况</p><div class="chart" id="hourly"></div><div class="readout" id="hourlyRO">&nbsp;</div>
-      <div class="legend"><span><i style="background:var(--r-min)"></i>运动</span><span><i style="background:var(--line-2)"></i>有定位</span><span><i style="background:var(--z2)"></i>LIVE 追踪</span><span><i class="hatch"></i>没有定位</span></div></section>` +
+    `<section class="card"><h2>活动时间分布</h2><p class="hint">${tr && tr.hourly ? '每小时的活动分钟，来自 Tractive 项圈传感器' : '每小时检测到移动的分钟数，来自 GPS'}；下方色条是定位记录的情况</p><div class="chart" id="hourly"></div><div class="readout" id="hourlyRO">&nbsp;</div>
+      <div class="legend"><span><i style="background:var(--r-min)"></i>活动</span><span><i style="background:var(--line-2)"></i>有定位</span><span><i style="background:var(--z2)"></i>LIVE 追踪</span><span><i class="hatch"></i>没有定位</span></div></section>` +
+    (tr && (tr.night != null || tr.nap != null) ? `<section class="card"><h2>睡眠与休息</h2><p class="hint">来自 Tractive 项圈传感器</p><div class="stats">
+      <div><div class="l">夜间睡眠</div><div class="v">${tr.night != null ? durHTML(tr.night * 60) : '—'}</div></div>
+      <div><div class="l">白天小睡</div><div class="v">${tr.nap != null ? durHTML(tr.nap * 60) : '—'}</div></div>
+      <div><div class="l">安静休息</div><div class="v">${tr.calm != null ? durHTML(tr.calm * 60) : '—'}</div></div>
+      <div><div class="l">Tractive 建议活动</div><div class="v">${tr.goal ? tr.goal + '<span class="u">分钟/天</span>' : '—'}</div></div>
+    </div></section>` : '') +
     `<h2 class="sec-title">运动记录<small>${walks.length ? `${walks.length} 次 · ${distText(walks.reduce((s, a) => s + a.distance, 0))}` : ''}</small></h2>` +
     (walks.length ? `<div class="list">${walks.map(walkRow).join('')}</div>` : `<div class="card empty">${hasData(key) ? `<b>这天没有识别到运动。</b>Tractive 平时约 10 分钟才定位一次，看不出走动细节。遛 ${esc(S.name)} 时在 Tractive 里打开 <b>LIVE</b>，这里就能算出距离、速度和分段。` : '这天没有数据。'}</div>`) +
     `<h2 class="sec-title">更多</h2>` + stats;
@@ -349,7 +368,8 @@ function thumb(a) {
 function drawHourly(d) {
   const el = $('#hourly'); if (!el) return;
   const W = Math.max(280, el.clientWidth), H = 150, pl = 28, pr = 4, pt = 8, ch = 96, sy = pt + ch + 22;
-  const mins = d.hourly.map(s => s / 60);
+  const tq = tractiveOf(d.key);
+  const mins = tq && tq.hourly ? tq.hourly : d.hourly.map(s => s / 60);
   const vmax = Math.max(10, niceMax(Math.max(...mins)));
   const bw = (W - pl - pr) / 24, w = Math.min(10, bw - 3);
   const Y = v => pt + ch - v / vmax * ch;
@@ -373,7 +393,7 @@ function drawHourly(d) {
   const at = ev => { const r = el.firstChild.getBoundingClientRect(); const h = Math.max(0, Math.min(23, Math.floor(((ev.clientX - r.left) / r.width * W - pl) / bw))); return h; };
   const show = ev => {
     const h = at(ev), m = mins[h];
-    ro.innerHTML = `<b>${pad(h)}:00–${pad((h + 1) % 24)}:00</b>　运动 ${m >= 1 ? Math.round(m) + ' 分钟' : m > 0 ? '不到 1 分钟' : '0'}${d.live[h] > 0 ? ' · 有 LIVE 记录' : d.cover[h] ? '' : ' · 没有定位'}`;
+    ro.innerHTML = `<b>${pad(h)}:00–${pad((h + 1) % 24)}:00</b>　活动 ${m >= 1 ? Math.round(m) + ' 分钟' : m > 0 ? '不到 1 分钟' : '0'}${d.live[h] > 0 ? ' · 有 LIVE 记录' : d.cover[h] ? '' : ' · 没有定位'}`;
   };
   const hit = $('#hHit', el);
   hit.addEventListener('pointermove', show); hit.addEventListener('pointerdown', show);
@@ -386,7 +406,7 @@ function viewHistory(arg) {
   const tk = todayKey();
   const month = arg && /^\d{4}-\d{2}$/.test(arg) ? arg : tk.slice(0, 7);
   // trends: last 7 days vs the 28 days before
-  const win = (from, n) => { let dist = 0, sec = 0, walks = 0, wd = 0, wsec = 0, nd = 0; for (let i = 0; i < n; i++) { const k = addDays(from, -i); if (!hasData(k)) continue; const d = dayOf(k); nd++; dist += d.dist; sec += d.sec; walks += d.walks.length; for (const a of d.walks) { wd += a.distance; wsec += a.movingTime; } } return { nd, dist: nd ? dist / nd : 0, sec: nd ? sec / nd : 0, walks: nd ? walks / nd : 0, v: wsec ? wd / wsec : 0 }; };
+  const win = (from, n) => { let dist = 0, sec = 0, walks = 0, wd = 0, wsec = 0, nd = 0; for (let i = 0; i < n; i++) { const k = addDays(from, -i); if (!hasData(k)) continue; const d = dayOf(k); nd++; dist += d.dist; sec += actMin(d) * 60; walks += d.walks.length; for (const a of d.walks) { wd += a.distance; wsec += a.movingTime; } } return { nd, dist: nd ? dist / nd : 0, sec: nd ? sec / nd : 0, walks: nd ? walks / nd : 0, v: wsec ? wd / wsec : 0 }; };
   const cur = win(tk, 7), prev = win(addDays(tk, -7), 28);
   let trends;
   if (cur.nd >= 3 && prev.nd >= 7) {
@@ -397,7 +417,7 @@ function viewHistory(arg) {
     };
     trends = `<section class="card"><h2>趋势</h2><p class="hint">最近 7 天的日均，和之前 4 周相比</p>
       ${row('每天距离', (cur.dist / 1000).toFixed(2), 'km', cur.dist, prev.dist, v => (v / 1000).toFixed(2) + ' km')}
-      ${row('每天运动', Math.round(cur.sec / 60), '分钟', cur.sec, prev.sec, v => Math.round(v / 60) + ' 分钟')}
+      ${row('每天活动', Math.round(cur.sec / 60), '分钟', cur.sec, prev.sec, v => Math.round(v / 60) + ' 分钟')}
       ${row('每天散步', cur.walks.toFixed(1), '次', cur.walks, prev.walks, v => v.toFixed(1) + ' 次')}
       ${row('散步速度', kmh(cur.v), 'km/h', cur.v, prev.v, v => kmh(v) + ' km/h')}</section>`;
   } else {
@@ -415,7 +435,7 @@ function viewHistory(arg) {
     cal += `<button type="button" data-go="#/today/${k}" class="${k === tk ? 'today' : ''}" ${fut ? 'disabled' : ''} aria-label="${mdKey(k)}"><span>${i}</span>${hasData(k) ? ringsSVG(fracs(dayOf(k)), 32, 4, 1) : (fut ? '<span style="height:32px"></span>' : '<span class="nod"></span>')}</button>`;
   }
   cal += '</div>';
-  const seg = `<div class="seg" role="group" aria-label="指标">${[['dist', '距离'], ['min', '运动'], ['walks', '散步']].map(([k, l]) => `<button type="button" data-metric="${k}" aria-pressed="${histMetric === k}">${l}</button>`).join('')}</div>`;
+  const seg = `<div class="seg" role="group" aria-label="指标">${[['dist', '距离'], ['min', '活动'], ['walks', '散步']].map(([k, l]) => `<button type="button" data-metric="${k}" aria-pressed="${histMetric === k}">${l}</button>`).join('')}</div>`;
   root.innerHTML = banners() + head(`${S.name} 的记录`, '历史', importBtnFn()) + trends +
     `<section class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><h2>最近 30 天</h2>${seg}</div><div class="chart" id="d30"></div><div class="readout" id="d30RO">&nbsp;</div></section>` +
     `<section class="card"><div class="cal-head"><button class="icon-btn" type="button" data-go="#/history/${prevM}" aria-label="上个月">${IC.left}</button><h2>${y} 年 ${m} 月</h2><button class="icon-btn" type="button" data-go="#/history/${nextM}" aria-label="下个月" ${nextM > tk.slice(0, 7) ? 'disabled' : ''}>${IC.right}</button></div>${cal}</section>`;
@@ -425,7 +445,7 @@ function viewHistory(arg) {
 function drawDays30() {
   const el = $('#d30'); if (!el) return;
   const tk = todayKey();
-  const M = { dist: { v: d => d.dist / 1000, goal: +S.goalKm || 2, f: v => v.toFixed(2) + ' km', c: 'var(--r-dist)' }, min: { v: d => d.sec / 60, goal: +S.goalMin || 60, f: v => Math.round(v) + ' 分钟', c: 'var(--r-min)' }, walks: { v: d => d.walks.length, goal: +S.goalWalks || 2, f: v => v + ' 次', c: 'var(--r-walk)' } }[histMetric];
+  const M = { dist: { v: d => d.dist / 1000, goal: +S.goalKm || 2, f: v => v.toFixed(2) + ' km', c: 'var(--r-dist)' }, min: { v: d => actMin(d), goal: +S.goalMin || 60, f: v => Math.round(v) + ' 分钟', c: 'var(--r-min)' }, walks: { v: d => d.walks.length, goal: +S.goalWalks || 2, f: v => v + ' 次', c: 'var(--r-walk)' } }[histMetric];
   const rows = []; for (let i = 29; i >= 0; i--) { const k = addDays(tk, -i); rows.push({ k, has: hasData(k), v: hasData(k) ? M.v(dayOf(k)) : 0 }); }
   const W = Math.max(280, el.clientWidth), H = 160, pl = 30, pr = 30, pt = 10, pb = 22;
   const vmax = niceMax(Math.max(M.goal * 1.15, ...rows.map(r => r.v)));
@@ -705,7 +725,7 @@ function viewSettings() {
     </div>
     <div class="group-title">每日目标</div><div class="group">
       <div class="row"><label for="sKm"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--r-dist);margin-right:8px"></i>距离（km）</label><input id="sKm" type="number" inputmode="decimal" min="0.1" max="50" step="0.1" value="${esc(S.goalKm)}"></div>
-      <div class="row"><label for="sMin"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--r-min);margin-right:8px"></i>运动（分钟）</label><input id="sMin" type="number" inputmode="numeric" min="5" max="600" step="5" value="${esc(S.goalMin)}"></div>
+      <div class="row"><label for="sMin"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--r-min);margin-right:8px"></i>活动（分钟）<span class="sub">默认跟随 Tractive 的建议</span></label><input id="sMin" type="number" inputmode="numeric" min="5" max="600" step="5" value="${esc(S.goalMin)}"></div>
       <div class="row"><label for="sWalks"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--r-walk);margin-right:8px"></i>散步（次）</label><input id="sWalks" type="number" inputmode="numeric" min="1" max="10" step="1" value="${esc(S.goalWalks)}"></div>
     </div>
     <div class="group-title">自动同步</div><div class="group">
@@ -735,7 +755,7 @@ function viewSettings() {
     <div class="group-title">说明</div><div class="group notes">
       <p><b>自动同步（推荐）：</b>GitHub 上的私有仓库 mio-data 每小时自动从 Tractive 拉取数据，填好上面的仓库和令牌后，打开 App 就是最新的。</p>
       <p><b>手动导入 GPX：</b>用 Safari 打开 Tractive 网页版，在历史轨迹里选好日期导出 GPX，文件会存到「文件」App 的下载里，再回这里点右上角的 + 导入。可以一次选多个文件，重复导入同一天也没关系。</p>
-      <p><b>三个圆环：</b>外圈是距离，中间是运动分钟（检测到移动的时间），内圈是散步次数。</p>
+      <p><b>三个圆环：</b>外圈是距离，中圈是活动分钟，内圈是散步次数。活动分钟优先用 Tractive 项圈传感器的数据（在家玩、院子里跑也算），没有时用 GPS 检测到移动的时间。</p>
       <p><b>采样决定细节：</b>Tractive 平时约 10 分钟定位一次，只有 LIVE 模式下才 2 到 4 秒记录一次。距离、速度、分段主要来自 LIVE 记录，所以遛狗时记得打开 LIVE。</p>
       <p><b>漂移过滤：</b>静止时 GPS 也会在几十米内跳动，这些漂移不计入距离。持续超过 32 km/h 的路段视为乘车。</p>
       <p style="margin:0"><b>消耗</b>按 Taylor 等人（1982）的犬类运动能耗公式估算；<b>海拔</b>来自 GPS，误差 10 到 30 m，仅供参考。</p>
@@ -744,6 +764,7 @@ function viewSettings() {
   $('#sName').addEventListener('change', e => { S.name = e.target.value.trim() || 'Mio'; saveSettings(); });
   $('#sWeight').addEventListener('change', e => { const v = parseFloat(e.target.value); S.weight = v > 0 && v <= 120 ? v : ''; e.target.value = S.weight; saveSettings(); });
   num('sKm', 'goalKm', 0.1, 50); num('sMin', 'goalMin', 5, 600); num('sWalks', 'goalWalks', 1, 10);
+  $('#sMin').addEventListener('change', () => { S.goalMinCustom = true; saveSettings(); });
   $('#sMap').addEventListener('change', e => { S.mapProvider = e.target.value; saveSettings(); $('#gkeyRow').hidden = S.mapProvider !== 'google'; if (S.mapProvider === 'google' && !S.gkey) $('#sGkey').focus(); });
   $('#sGkey').addEventListener('change', e => { S.gkey = e.target.value.trim(); saveSettings(); gmPromise = null; });
   $('#sRepo').addEventListener('change', e => { S.ghRepo = e.target.value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''); e.target.value = S.ghRepo; saveSettings(); try { localStorage.removeItem(KEY_SHA); } catch { /* ignore */ } });
