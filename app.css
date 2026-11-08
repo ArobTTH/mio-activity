@@ -279,3 +279,13 @@ tr.partial td { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 
 .row[hidden] { display: none; }
+
+/* ---------- access password ---------- */
+body.locked .tabs { display: none; }
+.gate { max-width: 340px; margin: 18vh auto 0; display: grid; gap: 10px; text-align: center; }
+.gate svg { width: 56px; height: 56px; color: var(--accent); margin: 0 auto 4px; }
+.gate h1 { font-size: 26px; margin-bottom: 14px; }
+.gate label { font-size: 14px; color: var(--ink-2); }
+.gate input { border: 1px solid var(--line-2); background: var(--surface); border-radius: 12px; padding: 12px 14px; font-size: 17px; text-align: center; letter-spacing: .08em; }
+.gate input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gate-err { min-height: 20px; margin: 0; font-size: 13px; color: var(--muted); }

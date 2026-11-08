@@ -1,5 +1,5 @@
 // Offline support: the app shell is cached on install; map tiles you've viewed are kept for offline use.
-const VERSION = 'mio-v4';
+const VERSION = 'mio-v5';
 const TILES = 'mio-tiles';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'engine.js', 'leaflet.js', 'leaflet.css', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
