@@ -27,9 +27,10 @@ gh api -X POST repos/{owner}/mio-activity/pages -f "source[branch]=main" -f "sou
 
 ## 自动同步（推荐）
 
-私有仓库  里的 GitHub Actions 每小时登录 Tractive 拉一次数据。设置一次以后，打开 App 就是最新的，不用再导出导入：
+私有仓库 `mio-data` 里的 GitHub Actions 每小时登录 Tractive 拉一次数据。设置一次以后，打开 App 就是最新的，不用再导出导入：
 
-1. 在 mio-data 仓库的 Settings → Secrets and variables → Actions 里添加  和 2. 在 github.com/settings/personal-access-tokens/new 新建 Fine-grained token：只选 mio-data 仓库，Contents 只读，Actions 读写
+1. 在 mio-data 仓库的 Settings → Secrets and variables → Actions 里添加 `TRACTIVE_EMAIL` 和 `TRACTIVE_PASSWORD`
+2. 在 github.com/settings/personal-access-tokens/new 新建 Fine-grained token：只选 mio-data 仓库，Contents 只读，Actions 读写
 3. 把令牌粘贴到 App 的「设置 → 自动同步」
 
 详细说明见 mio-data 仓库的 README。
