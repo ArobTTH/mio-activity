@@ -214,10 +214,9 @@ path.trk { stroke-linecap: round; stroke-linejoin: round; fill: none; }
 path.casing { stroke: var(--casing); }
 path.z0 { stroke: var(--z0); } path.z1 { stroke: var(--z1); } path.z2 { stroke: var(--z2); }
 path.z3 { stroke: var(--z3); } path.z4 { stroke: var(--z4); } path.zv { stroke: var(--veh); stroke-dasharray: 6 6; }
-path.zs { stroke-dasharray: 2 6; }
+path.zs { stroke-opacity: .5; }
 path.mk-start { fill: var(--accent); stroke: var(--surface); }
 path.mk-end { fill: var(--ink); stroke: var(--surface); }
-path.mk-pause { fill: var(--surface); stroke: var(--ink-2); }
 path.mk-hover { fill: var(--ink); stroke: var(--surface); }
 
 /* ---------- detail ---------- */

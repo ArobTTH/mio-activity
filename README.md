@@ -47,7 +47,7 @@ gh api -X POST repos/{owner}/mio-activity/pages -f "source[branch]=main" -f "sou
 
 | 圆环 | 含义 | 默认目标 |
 |---|---|---|
-| 外圈 | 距离（已滤除静止时的 GPS 漂移） | 2 km |
+| 外圈 | 距离（已滤除静止时的 GPS 漂移和坐车的路程） | 2 km |
 | 中圈 | 活动分钟（优先用 Tractive 项圈传感器的数据，没有时用 GPS） | 跟随 Tractive 的建议 |
 | 内圈 | 散步次数 | 2 次 |
 

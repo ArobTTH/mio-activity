@@ -507,6 +507,7 @@ function viewWalk(id) {
     lede += a.pauses.length ? `，途中停下 ${a.pauses.length} 次，最长一次 ${durText(longest)}。` : '，途中没有明显停顿。';
     if (a.vehicleTime) lede += `另有 ${durText(a.vehicleTime)} 在乘车，已从距离和速度里剔除。`;
   } else lede = '这段只有常规定位，点和点之间隔了好几分钟，距离按直线估算，通常比实际走的少，速度和步态只是粗略估计。';
+  if (a.afterCar || a.beforeCar) lede += `${a.afterCar && a.beforeCar ? '前后' : a.afterCar ? '之前' : '之后'}坐车的部分已经去掉，只算 ${S.name} 自己走的。`;
   const key = dayKey(a.start);
   const stat = (l, v, s) => `<div><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   root.innerHTML = `<button class="back" type="button" data-back="#/today/${key}">${IC.left}返回</button>` +
@@ -636,7 +637,6 @@ function leafletMap(el, a) {
   const ll = a.samples.map(s => [s.lat, s.lon]);
   L.polyline(ll, { className: 'trk casing', weight: 8, interactive: false }).addTo(map);
   for (const r of runs(a.samples)) L.polyline(r.pts.map(s => [s.lat, s.lon]), { className: 'trk ' + r.cls, weight: 5, interactive: false }).addTo(map);
-  for (const p of a.pauses) L.circleMarker([p.lat, p.lon], { radius: Math.min(9, 4 + Math.sqrt(p.dur) / 2), weight: 2, className: 'mk-pause' }).bindTooltip(`停顿 ${durText(p.dur)} · ${hm(p.t0)}`, { direction: 'top' }).addTo(map);
   const s0 = a.samples[0], s1 = a.samples[a.samples.length - 1];
   L.circleMarker([s1.lat, s1.lon], { radius: 6, weight: 2, className: 'mk-end' }).bindTooltip(`终点 ${hm(s1.t)}`, { direction: 'top' }).addTo(map);
   L.circleMarker([s0.lat, s0.lon], { radius: 6, weight: 2, className: 'mk-start' }).bindTooltip(`起点 ${hm(s0.t)}`, { direction: 'top' }).addTo(map);
@@ -647,13 +647,31 @@ function leafletMap(el, a) {
     destroy() { clearTimeout(slowT); map.remove(); },
   };
 }
+// Coloured pieces of the track. Stops take the colour of the walking around them and colour flips
+// shorter than a few metres are absorbed, so the line stays smooth instead of breaking into speckles.
 function runs(samples) {
+  const n = samples.length - 1;
+  if (n < 1) return [];
+  const z = [], dense = [];
+  for (let i = 1; i <= n; i++) { const s = samples[i]; z.push(s.vehicle ? -2 : Math.max(0, s.zone)); dense.push(!!s.dense); }
+  let last = 0; for (let k = 0; k < n; k++) { if (z[k] > 0) last = z[k]; else if (z[k] === 0 && last) z[k] = last; }
+  let next = 0; for (let k = n - 1; k >= 0; k--) { if (z[k] > 0) next = z[k]; else if (z[k] === 0 && next) z[k] = next; }
+  const len = (k0, k1) => { let m = 0; for (let k = k0; k <= k1; k++) m += E.hav(samples[k], samples[k + 1]); return m; };
+  for (let pass = 0; pass < 2; pass++) {
+    for (let k = 0; k < n;) {
+      let j = k; while (j + 1 < n && z[j + 1] === z[k] && dense[j + 1] === dense[k]) j++;
+      if (dense[k] && z[k] > 0 && len(k, j) < 12) {
+        const fill = k > 0 && z[k - 1] > 0 ? z[k - 1] : j + 1 < n && z[j + 1] > 0 ? z[j + 1] : z[k];
+        for (let q = k; q <= j; q++) z[q] = fill;
+      }
+      k = j + 1;
+    }
+  }
   const out = []; let cur = null;
-  const clsOf = s => s.vehicle ? 'zv' : `z${Math.max(0, s.zone)}${s.dense ? '' : ' zs'}`;
-  for (let i = 1; i < samples.length; i++) {
-    const c = clsOf(samples[i]);
-    if (!cur || cur.cls !== c) { cur = { cls: c, zone: samples[i].vehicle ? -2 : Math.max(0, samples[i].zone), dense: samples[i].dense, pts: [samples[i - 1]] }; out.push(cur); }
-    cur.pts.push(samples[i]);
+  for (let k = 0; k < n; k++) {
+    const cls = z[k] === -2 ? 'zv' : `z${z[k]}${dense[k] ? '' : ' zs'}`;
+    if (!cur || cur.cls !== cls) { cur = { cls, zone: z[k], dense: dense[k], pts: [samples[k]] }; out.push(cur); }
+    cur.pts.push(samples[k + 1]);
   }
   return out;
 }
@@ -701,15 +719,14 @@ async function googleMap(el, a) {
   new g.Polyline({ map, path: a.samples.map(ll), strokeColor: '#000000', strokeOpacity: isDark() ? 0.6 : 0.38, strokeWeight: 9, clickable: false, zIndex: 1 });
   for (const r of runs(a.samples)) {
     const c = col[r.zone] || col[1];
-    const dashed = r.zone === -2 || !r.dense;
+    const dashed = r.zone === -2;
     new g.Polyline({
-      map, path: r.pts.map(ll), clickable: false, zIndex: 2, strokeColor: c, strokeWeight: 5, strokeOpacity: dashed ? 0 : 1,
+      map, path: r.pts.map(ll), clickable: false, zIndex: 2, strokeColor: c, strokeWeight: 5, strokeOpacity: dashed ? 0 : r.dense ? 1 : 0.5,
       icons: dashed ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeColor: c, scale: 3 }, offset: '0', repeat: '12px' }] : undefined,
     });
   }
   const dot = (s, fill, stroke, scale, title, z = 3) => new g.Marker({ map, position: ll(s), title, clickable: !!title, zIndex: z, icon: { path: g.SymbolPath.CIRCLE, scale, fillColor: fill, fillOpacity: 1, strokeColor: stroke, strokeWeight: 2 } });
-  const surf = cssVar('--surface'), ink = cssVar('--ink'), ink2 = cssVar('--ink-2'), acc = cssVar('--accent');
-  for (const p of a.pauses) dot({ lat: p.lat, lon: p.lon }, surf, ink2, Math.min(8, 4 + Math.sqrt(p.dur) / 2), `停顿 ${durText(p.dur)} · ${hm(p.t0)}`);
+  const surf = cssVar('--surface'), ink = cssVar('--ink'), acc = cssVar('--accent');
   const s0 = a.samples[0], s1 = a.samples[a.samples.length - 1];
   dot(s1, ink, surf, 6, `终点 ${hm(s1.t)}`); dot(s0, acc, surf, 6, `起点 ${hm(s0.t)}`);
   const hov = dot(s0, ink, surf, 6, '', 9); hov.setVisible(false);
@@ -764,7 +781,7 @@ function viewSettings() {
       <p><b>手动导入 GPX：</b>用 Safari 打开 Tractive 网页版，在历史轨迹里选好日期导出 GPX，文件会存到「文件」App 的下载里，再回这里点右上角的 + 导入。可以一次选多个文件，重复导入同一天也没关系。</p>
       <p><b>三个圆环：</b>外圈是距离，中圈是活动分钟，内圈是散步次数。活动分钟优先用 Tractive 项圈传感器的数据（在家玩、院子里跑也算），没有时用 GPS 检测到移动的时间。</p>
       <p><b>采样决定细节：</b>Tractive 平时约 10 分钟定位一次，只有 LIVE 模式下才 2 到 4 秒记录一次。距离、速度、分段主要来自 LIVE 记录，所以遛狗时记得打开 LIVE。</p>
-      <p><b>漂移过滤：</b>静止时 GPS 也会在几十米内跳动，这些漂移不计入距离。持续超过 32 km/h 的路段视为乘车。</p>
+      <p><b>漂移过滤：</b>静止时 GPS 也会在几十米内跳动，这些漂移不计入距离。持续超过 32 km/h 的路段视为乘车，会从活动里整段去掉，活动只从下车后开始算。</p>
       <p style="margin:0"><b>消耗</b>按 Taylor 等人（1982）的犬类运动能耗公式估算；<b>海拔</b>来自 GPS，误差 10 到 30 m，仅供参考。</p>
     </div>`;
   const num = (id, key, min, max) => $('#' + id).addEventListener('change', e => { const v = parseFloat(e.target.value); if (v >= min && v <= max) { S[key] = v; saveSettings(); } else e.target.value = S[key]; });

@@ -10,6 +10,8 @@ const Engine = (() => {
     homeR: 100,           // m: radius around the main resting place
     restV: 0.3,           // m/s: below this the dog is standing still
     vehicleV: 9, vehicleSustain: 30, vehicleHard: 20, sparseVehicleV: 6,
+    vehicleTail: 1.0,     // m/s: a drive keeps going (speeding up / slowing down) while faster than this
+    roadStop: 180,        // s: a stop between two drives shorter than this is traffic, not an outing
     sparseJitter: 35,     // m: sparse steps shorter than this are GPS drift
     anchor: 2,            // m: dense-track hysteresis against jitter
     pauseMin: 10,         // s
@@ -144,6 +146,22 @@ const Engine = (() => {
         k = Math.max(j, k + 1);
       } else k++;
     }
+    // a coarse ping where the collar itself reported car speed: the legs on either side were driven
+    pts.forEach((p, i) => {
+      if (!(p.spd > CFG.vehicleV)) return;
+      for (const s of [steps[i - 1], steps[i]]) if (s && !s.dense && !s.gap) s.vehicle = true;
+    });
+    // a real drive lasts at least vehicleSustain (a lone fast step is a GPS glitch: excluded, but no drive)
+    for (let k = 0; k < steps.length;) {
+      if (!steps[k].vehicle) { k++; continue; }
+      let j = k, dur = 0; while (j < steps.length && steps[j].vehicle) { dur += steps[j].dt; j++; }
+      if (dur >= CFG.vehicleSustain) for (let q = k; q < j; q++) steps[q].drive = true;
+      k = j;
+    }
+    // include the speeding-up and slowing-down around each drive
+    const tail = s => s && s.dense && !s.gap && !s.drive && s.v > CFG.vehicleTail;
+    for (let k = 1; k < steps.length; k++) if (steps[k - 1].drive && tail(steps[k])) steps[k].vehicle = steps[k].drive = true;
+    for (let k = steps.length - 2; k >= 0; k--) if (steps[k + 1].drive && tail(steps[k])) steps[k].vehicle = steps[k].drive = true;
 
     // distance with anchor hysteresis
     const cum = new Array(n).fill(0);
@@ -253,7 +271,7 @@ const Engine = (() => {
       medianDt: median(dts), denseMedianDt: median(denseDts), denseShare,
       distance: total, movingTime: moving, avgMoving: moving > 0 ? total / moving : 0,
       maxV, maxAt, zoneTime, vehicleTime: vehTime, vehicleDist: vehDist, gapTime,
-      pauses, splits, splitLen: L, elev, samples,
+      pauses, splits, splitLen: L, elev, samples, vsteps: steps.map(s => !!s.drive),
       rawDistance: pts.reduce((a, p, i) => i ? a + hav(pts[i - 1], p) : 0, 0),
     };
   }
@@ -320,15 +338,34 @@ const Engine = (() => {
       if (last && (r.a <= last.b || (pts[r.a].t - pts[last.b].t) / 1000 <= CFG.mergeGap)) { last.b = Math.max(last.b, r.b); last.live = last.live || r.live; }
       else merged.push({ ...r });
     }
+    // Driving never belongs to an activity: cut each range wherever it was driven, and drop the
+    // coarse pings right next to the car (they are often taken while still parking).
     const activities = [];
-    for (const r of merged) {
-      const slice = pts.slice(r.a, r.b + 1);
-      if (slice.length < 2) continue;
-      const a = analyzeTrack(slice);
-      if (a.distance < 30 && a.movingTime < 60) continue;
-      a.live = r.live; a.idx = [r.a, r.b];
-      activities.push(a);
-    }
+    const vehAt = new Array(n).fill(false); // step i → i+1 was driven
+    const hasDense = (a, b) => { for (let k = a; k < b; k++) if (dt(k) <= CFG.denseDt) return true; return false; };
+    const addRange = (a, b, live, carBefore, carAfter, depth) => {
+      if (carBefore || carAfter) {
+        const dense = hasDense(a, b);
+        if (carBefore) { if (dense) while (a < b && dt(a) > CFG.denseDt) a++; else a++; }
+        if (carAfter) { if (dense) while (b > a && dt(b - 1) > CFG.denseDt) b--; else b--; }
+        if (b <= a) return;
+        if (carBefore && carAfter && (pts[b].t - pts[a].t) / 1000 < CFG.roadStop) return;
+      }
+      if (b <= a) return;
+      const tr = analyzeTrack(pts.slice(a, b + 1));
+      const cuts = []; tr.vsteps.forEach((v, k) => { if (v) cuts.push(a + k); });
+      if (cuts.length && depth < 3) {
+        let s = a, before = carBefore;
+        for (const c of cuts) { vehAt[c] = true; addRange(s, c, live, before, true, depth + 1); s = c + 1; before = true; }
+        addRange(s, b, live, before, carAfter, depth + 1);
+        return;
+      }
+      if (tr.distance < 30 && tr.movingTime < 60) return;
+      tr.live = live && hasDense(a, b); tr.idx = [a, b]; tr.afterCar = carBefore; tr.beforeCar = carAfter;
+      activities.push(tr);
+    };
+    for (const r of merged) addRange(r.a, r.b, r.live, false, false, 0);
+    activities.sort((x, y) => x.start - y.start);
 
     // timeline blocks
     const actAt = new Array(n).fill(null);
@@ -344,7 +381,8 @@ const Engine = (() => {
       } else if (actAt[i] && actAt[i + 1] && actAt[i].a === actAt[i + 1].a && !actAt[i].a.live) {
         const z = actAt[i + 1].a.samples[actAt[i + 1].k].zone;
         state = z === -2 ? 'vehicle' : 'away';
-      } else state = away[i] || away[i + 1] ? 'away' : 'home';
+      } else if (vehAt[i]) state = 'vehicle';
+      else state = away[i] || away[i + 1] ? 'away' : 'home';
       const t0 = pts[i].t, t1 = pts[i + 1].t, aw = state !== 'gap' && (away[i] || away[i + 1]);
       const last = blocks[blocks.length - 1];
       if (last && last.state === state && last.aw === aw && last.t1 === t0) last.t1 = t1; else blocks.push({ state, t0, t1, aw });
