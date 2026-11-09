@@ -11,7 +11,7 @@ const standalone = navigator.standalone === true || matchMedia('(display-mode: s
 
 // ---------- settings ----------
 const KEY_S = 'mio.settings.v1';
-const DEFAULTS = { name: 'Mio', weight: '', goalKm: 2, goalMin: 60, goalWalks: 2, tz: '', mapProvider: 'esri', gkey: '', base: 'map', hideA2HS: false, ghRepo: 'ArobTTH/mio-data', ghToken: '', lastSync: 0 };
+const DEFAULTS = { name: 'Mio', weight: '', goalKm: 2, goalMin: 60, goalWalks: 2, tz: '', mapProvider: 'esri', gkey: '', base: 'map', hideA2HS: false, ghRepo: 'ArobTTH/mio-data', ghToken: '', lastSync: 0, placeLookup: true };
 const KEY_SHA = 'mio.sync.shas.v1';
 const ls = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
@@ -114,7 +114,7 @@ const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(
 const isDark = () => { const th = document.documentElement.dataset.theme; return th === 'dark' || (th !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); };
 
 // ---------- data ----------
-const D = { files: [], synced: [], health: new Map(), demo: false, A: null, days: new Map(), acts: [], byId: new Map() };
+const D = { files: [], synced: [], health: new Map(), names: [], places: new Map(), demo: false, A: null, days: new Map(), acts: [], byId: new Map() };
 const isWalk = a => a.distance >= 50 && a.vehicleTime < a.duration * 0.5;
 
 function analyze(points) {
@@ -160,6 +160,8 @@ async function loadData() {
   const all = await DB.all();
   const recs = all.filter(r => Array.isArray(r.pts) && r.pts.length);
   D.health = new Map(all.filter(r => r.kind === 'health').map(r => [r.day, r]));
+  D.names = all.filter(r => r.kind === 'name' && r.name);
+  D.places = new Map(all.filter(r => r.kind === 'place').map(r => [r.cell, r]));
   D.files = recs.filter(r => r.kind !== 'sync').map(({ pts, ...m }) => m).sort((a, b) => a.first - b.first);
   D.synced = recs.filter(r => r.kind === 'sync').map(({ pts, ...m }) => m).sort((a, b) => a.first - b.first);
   if (!S.goalMinCustom) {
@@ -169,6 +171,7 @@ async function loadData() {
   }
   if (recs.length) { D.demo = false; analyze(recs.flatMap(r => unpack(r.pts))); }
   else { D.demo = true; analyze(demoPoints()); }
+  setTimeout(resolvePlaces, 0);
 }
 
 // ---------- automatic sync from the private GitHub repo that GitHub Actions fills every hour ----------
@@ -244,13 +247,163 @@ async function syncNow() {
   toast('同步还在进行，稍后再打开 App 就能看到');
 }
 
-// ---------- names ----------
-function actName(a) {
-  const h = hourOf(a.start);
-  const part = h < 5 ? '深夜' : h < 8 ? '清晨' : h < 11 ? '上午' : h < 13 ? '中午' : h < 17 ? '下午' : h < 19 ? '傍晚' : '晚上';
-  if (a.vehicleTime > a.duration * 0.4) return part + '乘车外出';
-  if (!a.live) return part + '外出';
-  return part + ((a.zoneTime[3] + a.zoneTime[4]) / (a.movingTime || 1) >= 0.3 ? '奔跑' : '散步');
+// ---------- names: the user's own names first, otherwise place + what Mio did there ----------
+const KINDS = ['撒欢', '跑步', '玩耍', '散步'];
+const PARKISH = { leisure: ['dog_park', 'park', 'garden', 'nature_reserve', 'recreation_ground', 'common'], boundary: ['national_park', 'protected_area'], landuse: ['recreation_ground'] };
+const HOME_NEAR = 400; // m: activities centred this close to home are never looked up
+// a custom name sticks to the activity whose time overlaps it most (activities can grow as new points sync)
+const overlap = (a, r) => Math.max(0, Math.min(a.end, r.t1) - Math.max(a.start, r.t0));
+function customRec(a) {
+  let best = null, bo = 0;
+  for (const r of D.names) { const o = overlap(a, r); if (o > bo) { bo = o; best = r; } }
+  return best && bo >= 0.5 * Math.max(1, Math.min(a.end - a.start, best.t1 - best.t0)) ? best : null;
+}
+// shape of the track: centre point, how tightly it stays in one area, and fast bursts
+function feats(a) {
+  if (a._f) return a._f;
+  const s = a.samples, n = s.length, kx = Math.cos(s[0].lat * Math.PI / 180) * 111320, ky = 110574;
+  const w = s.map((p, i) => i < n - 1 ? Math.min(30, (s[i + 1].t - p.t) / 1000) : 0);
+  let W = 0, X = 0, Y = 0;
+  s.forEach((p, i) => { W += w[i]; X += w[i] * p.lon; Y += w[i] * p.lat; });
+  W = W || 1; X /= W; Y /= W;
+  let r2 = 0, mid = 0, md = Infinity;
+  s.forEach((p, i) => { const d2 = ((p.lon - X) * kx) ** 2 + ((p.lat - Y) * ky) ** 2; r2 += w[i] * d2; if (d2 < md) { md = d2; mid = i; } });
+  const rg = Math.sqrt(r2 / W);
+  let bursts = 0, run = 0, counted = false;
+  for (let i = 1; i < n; i++) {
+    const q = s[i];
+    if (q.dense && !q.vehicle && q.v >= 3) { run += (q.t - s[i - 1].t) / 1000; if (!counted && run >= 4) { bursts++; counted = true; } }
+    else { run = 0; counted = false; }
+  }
+  return (a._f = { mid: s[mid], rg, ratio: a.distance / Math.max(rg, 1), run: (a.zoneTime[3] + a.zoneTime[4]) / (a.movingTime || 1), bursts, perH: bursts / Math.max(a.duration / 3600, 0.05) });
+}
+const nearHome = a => !!(D.A && D.A.home) && E.hav(feats(a).mid, D.A.home) < HOME_NEAR;
+const cellOf = p => p.lat.toFixed(3) + ',' + p.lon.toFixed(3);
+function inPoly(geo, lon, lat) {
+  let c = false;
+  for (const poly of geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates) for (const ring of poly) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) c = !c;
+    }
+  }
+  return c;
+}
+const inPlace = (rec, q) => rec.geo ? inPoly(rec.geo, q.lon, q.lat) : rec.bbox && rec.bbox.length === 4 && q.lat >= rec.bbox[0] && q.lat <= rec.bbox[1] && q.lon >= rec.bbox[2] && q.lon <= rec.bbox[3];
+function placeOf(a) {
+  if (a._p !== undefined) return a._p;
+  const rec = D.places.get(cellOf(feats(a).mid));
+  if (!rec) return null; // not looked up yet
+  let p = null;
+  if (rec.ok && rec.name && a.samples.filter(q => inPlace(rec, q)).length >= a.samples.length * 0.5) {
+    const dog = rec.type === 'dog_park';
+    const bare = dog ? rec.name.replace(/\s*(dog\s*park|狗公园)\s*$/i, '').trim() : '';
+    p = { name: rec.name, dog, short: dog ? '狗公园' : rec.name.length <= 16 ? rec.name : '公园', label: bare && bare !== rec.name ? bare + ' 狗公园' : rec.name };
+  }
+  return (a._p = p);
+}
+function kindOf(a) {
+  if (!a.live) return null;
+  const f = feats(a), p = placeOf(a);
+  const lively = (f.bursts >= 3 && f.perH >= 6) || f.run >= 0.15;
+  if ((p && p.dog) || (a.distance >= 300 && f.ratio >= 25)) return lively ? '撒欢' : '玩耍';
+  if (f.run >= 0.35) return '跑步';
+  return '散步';
+}
+const joinName = (where, kind) => where ? where + (/[A-Za-z0-9]$/.test(where) ? ' ' : '') + kind : kind;
+const whereOf = a => { const p = placeOf(a); return p ? p.short : nearHome(a) ? '家附近' : ''; };
+function autoName(a) {
+  const k = kindOf(a), where = whereOf(a);
+  if (!k) return where && where !== '家附近' ? '去' + where : '外出';
+  return joinName(where, k);
+}
+const actName = a => { const r = customRec(a); return r ? r.name : autoName(a); };
+function refreshNames() {
+  root.querySelectorAll('[data-aname]').forEach(el => { const a = D.byId.get(el.dataset.aname); if (a) el.textContent = actName(a); });
+  root.querySelectorAll('[data-aplace]').forEach(el => { const a = D.byId.get(el.dataset.aplace); if (a) el.innerHTML = placeLine(a); });
+}
+const placeLine = a => { const p = placeOf(a); return p ? `${IC.pin}<span>${esc(p.name)}</span><small>© OpenStreetMap</small>` : nearHome(a) ? `${IC.pin}<span>家附近</span>` : ''; };
+
+// Park names come from OpenStreetMap (Nominatim, ≤ 1 request a second). Only the centre of an activity away
+// from home is sent; answers are kept on the phone, so each place is asked once.
+const placeTried = new Set();
+let placeBusy = false;
+async function resolvePlaces() {
+  if (placeBusy || D.demo || !S.placeLookup || !navigator.onLine) return;
+  placeBusy = true;
+  try {
+    const todo = [];
+    for (const a of D.acts) {
+      if (todo.length >= 30) break;
+      const f = feats(a), cell = cellOf(f.mid), rec = D.places.get(cell);
+      if ((rec && (rec.ok || Date.now() - rec.at < 30 * 86400e3)) || placeTried.has(cell) || nearHome(a)) continue;
+      placeTried.add(cell); todo.push([cell, f.mid]);
+    }
+    for (let i = 0; i < todo.length; i++) {
+      if (i) await new Promise(r => setTimeout(r, 1100));
+      const rec = await lookupPlace(...todo[i]);
+      if (rec === 'stop') break;
+      if (!rec) continue;
+      D.places.set(rec.cell, rec);
+      try { await DB.put(rec); } catch { /* cache only */ }
+      D.acts.forEach(a => { a._p = undefined; });
+      refreshNames();
+    }
+  } finally { placeBusy = false; }
+}
+async function lookupPlace(cell, p) {
+  const u = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${p.lat.toFixed(5)}&lon=${p.lon.toFixed(5)}&zoom=18&layer=poi&polygon_geojson=1&polygon_threshold=0.00005&accept-language=zh-CN,zh,en`;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
+  let j;
+  try {
+    const r = await fetch(u, { signal: ctl.signal });
+    if (r.status === 429 || r.status === 403) return 'stop';
+    if (!r.ok) return null;
+    j = await r.json();
+  } catch { return null; } finally { clearTimeout(timer); }
+  const rec = { id: 'place:' + cell, kind: 'place', cell, at: Date.now(), ok: false };
+  if (j && j.name && PARKISH[j.category] && PARKISH[j.category].includes(j.type)) {
+    Object.assign(rec, { ok: true, name: j.name, cat: j.category, type: j.type, bbox: (j.boundingbox || []).map(Number) });
+    const g = j.geojson;
+    if (g && (g.type === 'Polygon' || g.type === 'MultiPolygon') && JSON.stringify(g.coordinates).length < 300000) rec.geo = g;
+  }
+  return rec;
+}
+
+// rename sheet: free text plus one-tap suggestions
+function renameBox(a) {
+  const cur = customRec(a), auto = autoName(a), p = placeOf(a), where = whereOf(a), k = kindOf(a);
+  const sugg = [auto, ...(k ? KINDS.map(x => joinName(where, x)) : [])];
+  if (p && p.label !== p.short) sugg.push(joinName(p.label, k || '散步'));
+  D.names.slice().sort((x, y) => (y.at || 0) - (x.at || 0)).forEach(r => sugg.push(r.name));
+  const chips = [...new Set(sugg.filter(Boolean))].slice(0, 9);
+  const d = document.createElement('dialog');
+  d.className = 'namebox';
+  d.innerHTML = `<form><h3 tabindex="-1" autofocus>给这次运动起个名字</h3>
+    <input id="nmIn" maxlength="30" autocomplete="off" enterkeyhint="done" value="${esc(cur ? cur.name : auto)}" aria-label="运动名称">
+    <div class="chips">${chips.map(c => `<button type="button" class="chip" data-chip="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <p class="hint">${p ? `识别到的地点：${esc(p.name)}（© OpenStreetMap）。` : ''}自动名称按地点和 ${esc(S.name)} 的动作来起：一直快跑、冲刺多叫撒欢，在小范围里慢慢转叫玩耍。</p>
+    <div class="bar">${cur ? '<button type="button" class="btn secondary" data-v="auto">用自动名称</button>' : ''}<span style="flex:1"></span><button type="button" class="btn secondary" data-v="cancel">取消</button><button type="submit" class="btn">保存</button></div></form>`;
+  document.body.appendChild(d);
+  const inp = $('#nmIn', d);
+  const close = () => { d.close(); d.remove(); };
+  const save = async name => {
+    for (const r of D.names.filter(r => overlap(a, r) > 0)) { await DB.del(r.id); }
+    D.names = D.names.filter(r => overlap(a, r) <= 0);
+    if (name && name !== auto) {
+      const rec = { id: 'name:' + a.start, kind: 'name', t0: a.start, t1: a.end, name, at: Date.now() };
+      await DB.put(rec); D.names.push(rec);
+    }
+    refreshNames();
+  };
+  d.addEventListener('click', e => {
+    const c = e.target.closest('[data-chip]'); if (c) { inp.value = c.dataset.chip; return; }
+    const b = e.target.closest('[data-v]'); if (!b) return;
+    close(); if (b.dataset.v === 'auto') save('').then(() => toast('已换回自动名称'));
+  });
+  $('form', d).addEventListener('submit', e => { e.preventDefault(); const v = inp.value.trim().slice(0, 30); close(); save(v); });
+  d.addEventListener('cancel', () => d.remove());
+  d.showModal();
 }
 
 // ---------- icons ----------
@@ -262,6 +415,8 @@ const IC = {
   up: '<svg viewBox="0 0 12 12"><path d="M6 1.5 11 9H1z" fill="currentColor"/></svg>',
   down: '<svg viewBox="0 0 12 12"><path d="M6 10.5 1 3h10z" fill="currentColor"/></svg>',
   flat: '<svg viewBox="0 0 12 12"><rect x="1" y="5" width="10" height="2" rx="1" fill="currentColor"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>',
 };
 
 // ---------- rings ----------
@@ -360,7 +515,7 @@ function viewToday(arg) {
   drawHourly(d);
 }
 function walkRow(a) {
-  return `<button class="walk" type="button" data-go="#/walk/${a.start}">${thumb(a)}<div style="min-width:0"><div class="n">${esc(actName(a))}</div><div class="w">${esc(mdKey(dayKey(a.start)))} ${hm(a.start)}–${hm(a.end)}${a.live ? ' · LIVE' : ''}</div><div class="m">${distHTML(a.distance)}${durHTML(a.movingTime)}</div></div>${IC.chev}</button>`;
+  return `<button class="walk" type="button" data-go="#/walk/${a.start}">${thumb(a)}<div style="min-width:0"><div class="n" data-aname="${a.start}">${esc(actName(a))}</div><div class="w">${esc(mdKey(dayKey(a.start)))} ${hm(a.start)}–${hm(a.end)}${a.live ? ' · LIVE' : ''}</div><div class="m">${distHTML(a.distance)}${durHTML(a.movingTime)}</div></div>${IC.chev}</button>`;
 }
 function thumb(a) {
   const s = a.samples, k = Math.cos(s[0].lat * Math.PI / 180);
@@ -503,7 +658,8 @@ function viewWalk(id) {
   const zt = a.zoneTime, mv = zt.slice(1).reduce((s, x) => s + x, 0) || 1, domZ = zt.slice(1).indexOf(Math.max(...zt.slice(1))) + 1;
   let lede;
   if (dense) {
-    lede = `大部分时间在${E.ZONES[domZ].name}（占移动时间 ${Math.round(zt[domZ] / mv * 100)}%）`;
+    const fb = feats(a).bursts;
+    lede = (fb >= 3 ? `快跑了 ${fb} 次（每次超过 11 km/h），` : '') + `大部分时间在${E.ZONES[domZ].name}（占移动时间 ${Math.round(zt[domZ] / mv * 100)}%）`;
     lede += a.pauses.length ? `，途中停下 ${a.pauses.length} 次，最长一次 ${durText(longest)}。` : '，途中没有明显停顿。';
     if (a.vehicleTime) lede += `另有 ${durText(a.vehicleTime)} 在乘车，已从距离和速度里剔除。`;
   } else lede = '这段只有常规定位，点和点之间隔了好几分钟，距离按直线估算，通常比实际走的少，速度和步态只是粗略估计。';
@@ -511,7 +667,8 @@ function viewWalk(id) {
   const key = dayKey(a.start);
   const stat = (l, v, s) => `<div><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
   root.innerHTML = `<button class="back" type="button" data-back="#/today/${key}">${IC.left}返回</button>` +
-    head(`${mdKey(key)} ${wdKey(key)} · ${hm(a.start)}–${hm(a.end)}`, actName(a)) +
+    `<header class="head"><div style="min-width:0"><div class="eyebrow">${esc(`${mdKey(key)} ${wdKey(key)} · ${hm(a.start)}–${hm(a.end)}`)}</div><h1 data-aname="${a.start}">${esc(actName(a))}</h1></div><div class="acts"><button class="icon-btn" type="button" id="renameBtn" aria-label="改名">${IC.edit}</button></div></header>` +
+    `<p class="where" data-aplace="${a.start}">${placeLine(a)}</p>` +
     `<span class="pill ${dense ? '' : 'warn'}"><i></i>${dense ? `LIVE · 约 ${Math.round(a.denseMedianDt)} 秒一个点` : `常规定位 · 约 ${Math.round(a.medianDt / 60)} 分钟一个点`}</span>
     <p class="lede">${esc(lede)}</p>
     <section class="card"><div class="stats big">
@@ -528,6 +685,7 @@ function viewWalk(id) {
       <div class="legend">${E.ZONES.map((z, i) => `<span><i class="line" style="background:${ZC[i]}"></i>${z.name}</span>`).join('')}${a.vehicleTime ? '<span><i class="line" style="background:var(--veh)"></i>乘车</span>' : ''}</div></section>
     <section class="card"><h2>步态分布</h2><p class="hint">各速度区间累计的时间（km/h）</p>${zonesHTML(a)}</section>
     <section class="card"><h2>分段</h2><p class="hint">每 ${a.splitLen >= 1000 ? a.splitLen / 1000 + ' km' : a.splitLen + ' m'} 一段，用时包含停顿</p>${splitsHTML(a)}</section>`;
+  $('#renameBtn').addEventListener('click', () => renameBox(a));
   let mapApi = null;
   createMap($('#wMap'), a).then(m => { mapApi = m; if (m) cleanup.push(() => m.destroy()); });
   drawSpeed(a, q => mapApi && mapApi.hover(q));
@@ -763,6 +921,10 @@ function viewSettings() {
       <div class="row" id="gkeyRow" ${S.mapProvider === 'google' ? '' : 'hidden'}><label for="sGkey">Google API 密钥</label><input id="sGkey" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴 AIza 开头的密钥" value="${esc(S.gkey)}"></div>
     </div>
     <p class="group-foot">Google 地图需要你自己申请 Maps JavaScript API 密钥，只保存在这台手机上。没填密钥时用免费地图。</p>
+    <div class="group-title">运动名称</div><div class="group">
+      <div class="row"><label for="sPlace">自动识别地点<span class="sub">比如在狗公园、公园里，名字会带上地点</span></label><select id="sPlace" style="width:auto"><option value="1" ${S.placeLookup ? 'selected' : ''}>开</option><option value="0" ${S.placeLookup ? '' : 'selected'}>关</option></select></div>
+    </div>
+    <p class="group-foot">识别地点时，会把运动中心的大致位置发给 OpenStreetMap 查询地名，每个地方只查一次；家附近 ${HOME_NEAR} m 内的运动不查。想自己起名，在运动详情页点右上角的笔。</p>
     <div class="group-title">数据</div><div class="group">
       <div class="row"><span>导入 GPX</span><button class="btn secondary" type="button" data-do="import">选择文件</button></div>
       ${fileRows || `<div class="row"><span class="sub" style="font-size:14px">${D.demo ? '现在显示的是示例数据，导入后自动替换' : '还没有导入文件'}</span></div>`}
@@ -791,6 +953,7 @@ function viewSettings() {
   $('#sMin').addEventListener('change', () => { S.goalMinCustom = true; saveSettings(); });
   $('#sMap').addEventListener('change', e => { S.mapProvider = e.target.value; saveSettings(); $('#gkeyRow').hidden = S.mapProvider !== 'google'; if (S.mapProvider === 'google' && !S.gkey) $('#sGkey').focus(); });
   $('#sGkey').addEventListener('change', e => { S.gkey = e.target.value.trim(); saveSettings(); gmPromise = null; });
+  $('#sPlace').addEventListener('change', e => { S.placeLookup = e.target.value === '1'; saveSettings(); resolvePlaces(); });
   $('#sRepo').addEventListener('change', e => { S.ghRepo = e.target.value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''); e.target.value = S.ghRepo; saveSettings(); try { localStorage.removeItem(KEY_SHA); } catch { /* ignore */ } });
   $('#sTok').addEventListener('change', e => { S.ghToken = e.target.value.trim(); saveSettings(); if (syncReady()) pullSync({ quiet: false }); });
   $('#sTz').addEventListener('change', e => { S.tz = e.target.value; saveSettings(); resetTz(); computeDays(); });
@@ -858,7 +1021,10 @@ async function restore(file, text) {
     const j = JSON.parse(text || await file.text());
     if (j.app !== 'mio-activity' || !Array.isArray(j.files)) throw new Error('不是这个 App 的备份文件');
     let n = 0;
-    for (const r of j.files) if (r && r.id && Array.isArray(r.pts)) { await DB.put(r); n++; }
+    for (const r of j.files) {
+      if (r && r.id && Array.isArray(r.pts)) { await DB.put(r); n++; }
+      else if (r && r.id && (r.kind === 'name' || r.kind === 'health')) await DB.put(r);
+    }
     if (j.settings && typeof j.settings === 'object') { const keep = S.gkey, tok = S.ghToken; S = { ...DEFAULTS, ...S, ...j.settings, gkey: keep, ghToken: tok }; saveSettings(); resetTz(); }
     await loadData(); render(); toast(`已恢复 ${n} 个文件`);
   } catch (e) { toast('恢复失败：' + e.message); }

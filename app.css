@@ -147,7 +147,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
   display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; color: var(--ink);
 }
 .walk svg.thumb { width: 52px; height: 52px; background: var(--bg); border-radius: 12px; }
-.walk .n { font-weight: 600; font-size: 15px; }
+.walk .n { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .walk .w { color: var(--muted); font-size: 12.5px; }
 .walk .m { font-family: var(--font-num); font-weight: 700; font-size: 20px; line-height: 1.25; }
 .walk .m .u { font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--ink-2); margin: 0 6px 0 2px; }
@@ -220,6 +220,22 @@ path.mk-end { fill: var(--ink); stroke: var(--surface); }
 path.mk-hover { fill: var(--ink); stroke: var(--surface); }
 
 /* ---------- detail ---------- */
+.where { display: flex; align-items: center; gap: 4px; color: var(--ink-2); font-size: 14px; margin: -8px 0 10px; min-width: 0; }
+.where:empty { display: none; }
+.where svg { width: 16px; height: 16px; color: var(--accent); flex: none; }
+.where span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.where small { color: var(--muted); font-size: 11px; margin-left: 6px; flex: none; }
+
+/* ---------- rename sheet ---------- */
+dialog.namebox { border: 0; border-radius: 18px; padding: 18px; background: var(--surface); color: var(--ink); width: calc(100vw - 32px); max-width: 420px; box-shadow: 0 10px 40px rgba(0, 0, 0, .25); }
+dialog.namebox::backdrop { background: rgba(0, 0, 0, .4); }
+dialog.namebox h3 { font-size: 17px; margin-bottom: 12px; outline: none; }
+dialog.namebox input { width: 100%; border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 12px; background: var(--bg); font-size: 17px; }
+dialog.namebox input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+dialog.namebox .hint { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+dialog.namebox .bar { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { border: 0; border-radius: 999px; padding: 6px 12px; background: var(--accent-soft); color: var(--ink); font-size: 14px; }
 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); }
 .pill.warn { background: var(--warn-soft); }
 .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
