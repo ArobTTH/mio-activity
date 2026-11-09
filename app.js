@@ -221,9 +221,17 @@ async function pullSync({ quiet = true } = {}) {
   } finally { syncing = false; }
 }
 // Ask GitHub Actions to fetch from Tractive right now, wait for it, then pull.
+// Only one at a time: extra taps while a run is going would start extra runs that fight over the same files.
+let fetching = false;
 async function syncNow() {
   if (!syncReady()) { location.hash = '#/settings'; toast('先在设置里填好数据仓库和令牌'); return; }
+  if (fetching) { toast('正在从 Tractive 拉取，大约需要 1 分钟…', 120000); return; }
+  fetching = true;
+  try { return await syncRun(); } finally { fetching = false; }
+}
+async function syncRun() {
   const since = Date.now() - 5000;
+  toast('正在请求同步…', 120000);
   try {
     await ghApi(`/repos/${S.ghRepo}/actions/workflows/sync.yml/dispatches`, { method: 'POST', body: JSON.stringify({ ref: 'main', inputs: { days: '2' } }) });
   } catch (e) {
