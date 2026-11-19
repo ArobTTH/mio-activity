@@ -689,7 +689,7 @@ function viewWalk(id) {
       ${stat('海拔变化', a.elev ? `+${Math.round(a.elev.gain)}<span class="u">m</span>` : '—', a.elev ? 'GPS 估算，误差大' : '没有海拔数据')}
     </div></section>
     <section class="card" style="padding:8px"><div class="map" id="wMap"></div></section>
-    <section class="card"><h2>速度</h2><p class="hint">手指在图上左右滑动，地图上会标出 ${esc(S.name)} 当时的位置</p><div class="chart" id="speed"></div><div class="readout" id="speedRO">&nbsp;</div>
+    <section class="card"><h2>速度</h2><p class="hint">曲线经过平滑，冲刺的尖峰会被削低；圆点是实测最快的 4 秒。手指在图上左右滑动，地图上会标出 ${esc(S.name)} 当时的位置</p><div class="chart" id="speed"></div><div class="readout" id="speedRO">&nbsp;</div>
       <div class="legend">${E.ZONES.map((z, i) => `<span><i class="line" style="background:${ZC[i]}"></i>${z.name}</span>`).join('')}${a.vehicleTime ? '<span><i class="line" style="background:var(--veh)"></i>乘车</span>' : ''}</div></section>
     <section class="card"><h2>步态分布</h2><p class="hint">各速度区间累计的时间（km/h）</p>${zonesHTML(a)}</section>
     <section class="card"><h2>分段</h2><p class="hint">每 ${a.splitLen >= 1000 ? a.splitLen / 1000 + ' km' : a.splitLen + ' m'} 一段，用时包含停顿</p>${splitsHTML(a)}</section>`;
@@ -713,7 +713,7 @@ function drawSpeed(a, onHover) {
   const el = $('#speed'); if (!el) return;
   const W = Math.max(280, el.clientWidth), H = 200, pl = 30, pr = 34, pt = 20, pb = 24;
   const s = a.samples, t0 = s[0].t, t1 = s[s.length - 1].t;
-  const vmax = Math.max(5, niceMax(Math.max(...s.filter(q => !q.vehicle).map(q => q.v * 3.6)) * 1.1));
+  const vmax = Math.max(5, niceMax(Math.max(a.maxV, ...s.filter(q => !q.vehicle).map(q => q.v)) * 3.6 * 1.1));
   const X = t => pl + (t - t0) / Math.max(1, t1 - t0) * (W - pl - pr);
   const Y = v => pt + (1 - Math.min(v * 3.6, vmax) / vmax) * (H - pt - pb);
   let g = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="速度曲线"><g class="axis">`;
@@ -740,7 +740,8 @@ function drawSpeed(a, onHover) {
     run += `L${X(q.t).toFixed(1)} ${Y(q.vehicle ? 0 : q.v).toFixed(1)}`;
   }
   flush();
-  if (a.maxAt) { const i = bisect(s, a.maxAt); g += `<circle cx="${X(s[i].t)}" cy="${Y(s[i].v)}" r="4" style="fill:var(--ink);stroke:var(--surface)" stroke-width="2"/><text x="${Math.min(W - pr - 52, X(s[i].t) + 7)}" y="${Math.max(pt + 2, Y(s[i].v) - 7)}" style="fill:var(--ink-2);font-size:11px">最高 ${kmh(s[i].v)}</text>`; }
+  // the curve is smoothed; the dot marks the measured top speed, which can sit above it
+  if (a.maxAt) { const x = X(a.maxAt), y = Y(a.maxV); g += `<circle cx="${x}" cy="${y}" r="4" style="fill:var(--ink);stroke:var(--surface)" stroke-width="2"/><text x="${Math.min(W - pr - 52, x + 7)}" y="${Math.max(pt + 2, y - 7)}" style="fill:var(--ink-2);font-size:11px">最高 ${kmh(a.maxV)}</text>`; }
   g += `<line id="sX" y1="${pt}" y2="${H - pb}" style="display:none;stroke:var(--ink-2)" stroke-width="1"/><circle id="sDot" r="4.5" style="display:none;fill:var(--ink);stroke:var(--surface)" stroke-width="2"/>`;
   g += `<rect id="sHit" x="${pl}" y="0" width="${W - pl - pr}" height="${H}" fill="transparent"/></svg>`;
   el.innerHTML = g;

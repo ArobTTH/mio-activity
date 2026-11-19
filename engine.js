@@ -15,6 +15,7 @@ const Engine = (() => {
     sparseJitter: 35,     // m: sparse steps shorter than this are GPS drift
     anchor: 2,            // m: dense-track hysteresis against jitter
     pauseMin: 10,         // s
+    peakWin: 4,           // s: top speed is the fastest stretch at least this long
   };
   const ZONES = [
     { id: 'rest',   name: '休息', min: 0 },
@@ -208,6 +209,30 @@ const Engine = (() => {
     for (const s of steps) if (s.vehicle) { vehPoint[s.i] = vehPoint[s.i - 1] = true; }
     for (let i = 0; i < n; i++) if (!vehPoint[i] && isFinite(v[i]) && v[i] > maxV) { maxV = v[i]; maxAt = pts[i].t; }
     if (!denseDts.length) for (const s of steps) if (!s.vehicle && !s.gap && s.v > maxV) { maxV = s.v; maxAt = pts[s.i].t; }
+    // The smoothed speed above flattens a few-second sprint to about two thirds of its real peak. When the tracker
+    // also logged its own speed readings (m/s), take the fastest >= peakWin s stretch on which both agree:
+    // straight-line distance between the raw fixes, and the median reading inside it. Each source alone has
+    // outliers (GPS jumps; single readings that spike), so the lower of the two is used.
+    if (denseDts.length && pts.some(p => p.spd != null)) {
+      let best = 0, bestAt = null;
+      for (let i = 0; i < n - 1; i++) {
+        if (vehPoint[i]) continue;
+        for (let j = i + 1; j < n; j++) {
+          if (t[j] - t[j - 1] > CFG.denseDt || vehPoint[j]) break;
+          const T = t[j] - t[i];
+          if (T < CFG.peakWin) continue;
+          const rd = [];
+          for (let q = i + 1; q <= j; q++) if (isFinite(pts[q].spd)) rd.push(pts[q].spd);
+          if (rd.length) {
+            rd.sort((x, y) => x - y);
+            const vv = Math.min(hav(pts[i], pts[j]) / T, rd[(rd.length - 1) >> 1]);
+            if (vv > best) { best = vv; bestAt = (pts[i].t + pts[j].t) / 2; }
+          }
+          break;
+        }
+      }
+      if (best > 0) { maxV = best; maxAt = bestAt; }
+    }
 
     // elevation (GPS altitude is noisy: median filter + 5 m hysteresis)
     let elev = null;
