@@ -319,7 +319,7 @@ function kindOf(a) {
   return '散步';
 }
 const joinName = (where, kind) => where ? where + (/[A-Za-z0-9]$/.test(where) ? ' ' : '') + kind : kind;
-const whereOf = a => { const p = placeOf(a); return p ? p.short : nearHome(a) ? '家附近' : ''; };
+const whereOf = a => { const p = placeOf(a); return p ? (p.dog ? p.label : p.short) : nearHome(a) ? '家附近' : ''; };
 function autoName(a) {
   const k = kindOf(a), where = whereOf(a);
   if (!k) return where && where !== '家附近' ? '去' + where : '外出';
@@ -382,7 +382,7 @@ async function lookupPlace(cell, p) {
 function renameBox(a) {
   const cur = customRec(a), auto = autoName(a), p = placeOf(a), where = whereOf(a), k = kindOf(a);
   const sugg = [auto, ...(k ? KINDS.map(x => joinName(where, x)) : [])];
-  if (p && p.label !== p.short) sugg.push(joinName(p.label, k || '散步'));
+  if (p && p.label !== p.short) sugg.push(joinName(p.short, k || '散步'));
   D.names.slice().sort((x, y) => (y.at || 0) - (x.at || 0)).forEach(r => sugg.push(r.name));
   const chips = [...new Set(sugg.filter(Boolean))].slice(0, 9);
   const d = document.createElement('dialog');
@@ -434,12 +434,12 @@ const IC = {
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8.5 15l2.2 2 4.8-4.5" stroke-linejoin="round"/></svg>',
   flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h11l-2.5 4L17 12H6" fill="currentColor"/></svg>',
   paw: '<svg viewBox="0 0 26 26" fill="currentColor" aria-hidden="true"><ellipse cx="7" cy="10.5" rx="2.3" ry="3"/><ellipse cx="11.2" cy="6.6" rx="2.3" ry="3.1"/><ellipse cx="16.2" cy="6.8" rx="2.3" ry="3.1"/><ellipse cx="20" cy="11" rx="2.2" ry="2.9"/><path d="M13.6 12.2c-3.2 0-6.4 4.1-6.4 6.8 0 2.1 1.7 3.2 3.5 3.2 1.3 0 2-.6 3-.6s1.7.6 3 .6c1.8 0 3.5-1.1 3.5-3.2 0-2.7-3.2-6.8-6.6-6.8z"/></svg>',
+  flame: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.5 2.5c.6 3.2-1.4 4.9-3 6.6-1.5 1.6-2.8 3.3-2.8 5.9A5.4 5.4 0 0 0 12 20.5a5.6 5.6 0 0 0 5.6-5.6c0-2.3-1-3.8-2-5.1-.3 1.4-1 2.3-2 2.6.8-2.9.4-6.4-1.1-9.9z"/></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>',
 };
 
 // ---------- rings ----------
-function ringsSVG(fs, size, stroke, gap, cls = '') {
-  const colors = ['var(--r-dist)', 'var(--r-min)', 'var(--r-walk)'];
+function ringsSVG(fs, size, stroke, gap, cls = '', colors = ['var(--r-dist)', 'var(--r-min)', 'var(--r-walk)']) {
   const c = size / 2; let r = c - stroke / 2, out = '';
   fs.forEach((f, i) => {
     const C = 2 * Math.PI * r, ff = Math.max(0, Math.min(1, f || 0));
@@ -976,32 +976,32 @@ function fitter(samples, W, H, pad) {
   const ox = W / 2 - (x1 + x0) / 2 * sc, oy = H / 2 - (y1 + y0) / 2 * sc;
   return p => [p.lon * k * sc + ox, -p.lat * sc + oy];
 }
-const pathOf = (pts, f, maxN = 200) => { const st = Math.max(1, Math.floor(pts.length / maxN)); return pts.filter((_, i) => i % st === 0 || i === pts.length - 1).map((p, i) => { const [x, y] = f(p); return `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`; }).join(''); };
+const pathOf = (pts, f, maxN = 300) => { const st = Math.max(1, Math.floor(pts.length / maxN)); return pts.filter((_, i) => i % st === 0 || i === pts.length - 1).map((p, i) => { const [x, y] = f(p); return `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`; }).join(''); };
 const inSpan = (a, t0, t1) => a.samples.filter(q => q.t >= t0 && q.t <= t1);
-function vizRoute(a, sprints, W = 140, H = 64) {
+function vizRoute(a, sprints, W = 300, H = 150) {
   // the whole outing as a line; with sprints, a faint line and the fast stretches drawn on top
-  const f = fitter(a.samples, W, H, 5);
-  let g = `<path d="${pathOf(a.samples, f)}" fill="none" style="stroke:var(--c)" stroke-opacity="${sprints ? .25 : 1}" stroke-width="${sprints ? 1.5 : 2}" stroke-linejoin="round" stroke-linecap="round"/>`;
-  if (sprints) for (const sp of sprints) { const s = inSpan(a, sp.t0, sp.t1); if (s.length > 1) g += `<path d="${pathOf(s, f)}" fill="none" style="stroke:var(--c)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`; }
-  else { const [x, y] = f(a.samples[0]); g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2" style="fill:var(--c);stroke:var(--tile)" stroke-width="1.5"/>`; }
-  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}</svg>`;
+  const f = fitter(a.samples, W, H, 8);
+  let g = `<path d="${pathOf(a.samples, f)}" fill="none" style="stroke:var(--c)" stroke-opacity="${sprints ? .25 : 1}" stroke-width="${sprints ? 1.8 : 2.6}" stroke-linejoin="round" stroke-linecap="round"/>`;
+  if (sprints) for (const sp of sprints) { const s = inSpan(a, sp.t0, sp.t1); if (s.length > 1) g += `<path d="${pathOf(s, f)}" fill="none" style="stroke:var(--c)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`; }
+  else { const [x, y] = f(a.samples[0]); g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" style="fill:var(--c);stroke:var(--tile)" stroke-width="2"/>`; }
+  return `<svg class="route" viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}</svg>`;
 }
-function vizSprint(a, sp, W = 140, H = 64) {
+function vizSprint(a, sp, W = 300, H = 150) {
   const s = inSpan(a, sp.t0, sp.t1); if (s.length < 2) return '';
-  const f = fitter(s, W - 40, H, 8), [x0, y0] = f(s[0]), [x1, y1] = f(s[s.length - 1]);
-  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true"><path d="${pathOf(s, f)}" fill="none" style="stroke:var(--c)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x0.toFixed(1)}" cy="${y0.toFixed(1)}" r="3.5" style="fill:var(--tile);stroke:var(--c)" stroke-width="2"/><circle cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="4" style="fill:var(--c)"/>${sp.dist >= 100 ? `<text x="${W}" y="${H - 4}" text-anchor="end" style="fill:var(--muted)" font-size="10.5">≈${(sp.dist / 100).toFixed(1)} 个百米</text>` : ''}</svg>`;
+  const f = fitter(s, W, H, 14), [x0, y0] = f(s[0]), [x1, y1] = f(s[s.length - 1]);
+  return `<svg class="route" viewBox="0 0 ${W} ${H}" aria-hidden="true"><path d="${pathOf(s, f)}" fill="none" style="stroke:var(--c)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x0.toFixed(1)}" cy="${y0.toFixed(1)}" r="5" style="fill:var(--tile);stroke:var(--c)" stroke-width="2.5"/><circle cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="6" style="fill:var(--c)"/></svg>`;
 }
 function vizClock(sec) {
   const r = 22, C = 2 * Math.PI * r, f = Math.min(1, sec / 3600), f2 = Math.max(0, Math.min(1, sec / 3600 - 1));
   let ticks = '';
   for (let i = 0; i < 12; i++) { const an = i / 12 * 2 * Math.PI, r1 = i % 3 ? 15.5 : 12.5; ticks += `<line x1="${(30 + Math.sin(an) * 14).toFixed(1)}" y1="${(30 - Math.cos(an) * 14).toFixed(1)}" x2="${(30 + Math.sin(an) * r1).toFixed(1)}" y2="${(30 - Math.cos(an) * r1).toFixed(1)}" style="stroke:var(--muted)" stroke-width="${i % 3 ? 1 : 1.6}" stroke-linecap="round"/>`; }
-  return `<svg viewBox="0 0 60 60" width="60" height="60" aria-hidden="true"><circle cx="30" cy="30" r="${r}" fill="none" style="stroke:var(--c)" stroke-opacity=".18" stroke-width="7"/><circle cx="30" cy="30" r="${r}" fill="none" style="stroke:var(--c)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 30 30)"/>${f2 ? `<circle cx="30" cy="30" r="${r}" fill="none" style="stroke:var(--ink)" stroke-opacity=".5" stroke-width="3" stroke-dasharray="${(C * f2).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 30 30)"/>` : ''}${ticks}</svg>`;
+  return `<svg class="clock" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="30" r="${r}" fill="none" style="stroke:var(--c)" stroke-opacity=".18" stroke-width="7"/><circle cx="30" cy="30" r="${r}" fill="none" style="stroke:var(--c)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 30 30)"/>${f2 ? `<circle cx="30" cy="30" r="${r}" fill="none" style="stroke:var(--ink)" stroke-opacity=".5" stroke-width="3" stroke-dasharray="${(C * f2).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 30 30)"/>` : ''}${ticks}</svg>`;
 }
-const vizDots = n => `<div class="dots" aria-hidden="true">${'<i></i>'.repeat(Math.min(n, 60))}${n > 60 ? `<b>+${n - 60}</b>` : ''}</div>`;
+const vizDots = n => `<div class="dots" aria-hidden="true">${'<i></i>'.repeat(Math.min(n, 100))}${n > 100 ? `<b>+${n - 100}</b>` : ''}</div>`;
 function vizStreak() {
   const tk = todayKey(); let h = '<div class="streak" aria-hidden="true">';
-  for (let i = 13; i >= 0; i--) { const k = addDays(tk, -i), on = dayOf(k).walks.length > 0; h += `<i class="${on ? 'on' : ''}${k === tk ? ' today' : ''}"></i>`; }
-  return h + '</div><div class="streak-l"><span>两周前</span><span>今天</span></div>';
+  for (let i = 27; i >= 0; i--) { const k = addDays(tk, -i), on = dayOf(k).walks.length > 0; h += `<i class="${on ? 'on' : ''}${k === tk ? ' today' : ''}"></i>`; }
+  return h + '</div><div class="streak-l"><span>四周前</span><span>今天</span></div>';
 }
 // speedometer: the record on a dial, with a human jog and Usain Bolt's 100 m average for scale
 function gauge(v) {
@@ -1039,22 +1039,106 @@ function dial24(walks) {
   for (const w of walks) {
     const s = an(w.start); let e = an(w.end); if (e < s) e += TAU; if (e - s < 0.05) e = s + 0.05;
     const [x0, y0] = pt(s, r), [x1, y1] = pt(e, r);
-    g += `<path d="M${f1(x0)} ${f1(y0)}A${r} ${r} 0 ${e - s > Math.PI ? 1 : 0} 1 ${f1(x1)} ${f1(y1)}" fill="none" style="stroke:var(--r-walk)" stroke-opacity=".4" stroke-width="22"/>`;
+    g += `<path d="M${f1(x0)} ${f1(y0)}A${r} ${r} 0 ${e - s > Math.PI ? 1 : 0} 1 ${f1(x1)} ${f1(y1)}" fill="none" style="stroke:var(--k3)" stroke-opacity=".45" stroke-width="22"/>`;
   }
   [[0, '0 点'], [6, '6'], [12, '12'], [18, '18']].forEach(([h, l]) => { const [x, y] = pt(h / 24 * TAU, r + 23); g += `<text x="${f1(x)}" y="${f1(y + 4)}" text-anchor="middle" style="fill:var(--muted)" font-size="11">${l}</text>`; });
   return `<svg class="dial" viewBox="0 0 ${S0} ${S0}" role="img" aria-label="一天里什么时候出门">${g}</svg>`;
 }
-const MILES = [[1000, '1 公里'], [5000, '5 公里跑'], [10000, '10 公里跑'], [21097.5, '半程马拉松'], [42195, '全程马拉松'], [100000, '100 公里'], [160934, '100 英里'], [500000, '500 公里'], [1000000, '1000 公里']];
-function journey(dist) {
-  const next = MILES.find(([m]) => m > dist) || [(Math.floor(dist / 1e6) + 1) * 1e6, '下一个 1000 公里'];
-  const done = MILES.filter(([m]) => m <= dist);
-  const scale = next[0], X = m => (m / scale * 100).toFixed(2);
-  const ticks = MILES.filter(([m]) => m < scale && m / scale > 0.15).map(([m, l]) => `<i style="left:${X(m)}%"></i><em style="left:${X(m)}%">${l}</em>`).join('');
-  return `<div class="journey"><div class="track"><b style="width:${X(dist)}%"></b>${ticks}<span class="paw" style="left:${X(dist)}%">${IC.paw}</span><span class="flag">${IC.flag}</span></div>
-    <div class="ends"><span>出发</span><span>${next[1]}</span></div>
-    <p>${done.length ? `已经走完一个<b>${done[done.length - 1][1]}</b>的距离，` : ''}再走 <b>${distText(next[0] - dist)}</b> 就是一个${next[1]}。</p></div>`;
+
+// ---------- medals (Apple Fitness-style awards) ----------
+let medalN = 0;
+const polyPath = (n, r, rot = -Math.PI / 2) => { let d = ''; for (let i = 0; i < n; i++) { const a = rot + i * 2 * Math.PI / n; d += `${i ? 'L' : 'M'}${(60 + r * Math.cos(a)).toFixed(1)} ${(60 + r * Math.sin(a)).toFixed(1)}`; } return d + 'Z'; };
+const starPath = (n, r1, r2) => { let d = ''; for (let i = 0; i < 2 * n; i++) { const a = -Math.PI / 2 + i * Math.PI / n, r = i % 2 ? r2 : r1; d += `${i ? 'L' : 'M'}${(60 + r * Math.cos(a)).toFixed(1)} ${(60 + r * Math.sin(a)).toFixed(1)}`; } return d + 'Z'; };
+const SHAPES = {
+  circle: 'M60 5a55 55 0 1 1 0 110a55 55 0 1 1 0-110Z',
+  hex: polyPath(6, 58),
+  oct: polyPath(8, 58, -Math.PI / 2 + Math.PI / 8),
+  rosette: starPath(16, 58, 51),
+  shield: 'M60 4 108 19v40c0 30-20 48-48 58C32 107 12 89 12 59V19Z',
+  squircle: 'M60 5C101 5 115 19 115 60s-14 55-55 55S5 101 5 60 19 5 60 5Z',
+};
+function medal(o, size) {
+  const id = 'md' + (++medalN), sh = SHAPES[o.shape] || SHAPES.circle, L = o.locked;
+  const ink = L ? 'var(--lock-ink)' : '#fff';
+  const vs = String(o.val), n = [...vs].length, fs = n <= 2 ? 36 : n <= 3 ? 31 : n <= 4 ? 26 : 21;
+  const icon = o.icon ? `<g style="color:${ink}">${o.icon.replace('<svg ', `<svg x="48" y="${o.unit ? 16 : 22}" width="24" height="24" `)}</g>` : '';
+  const C = 2 * Math.PI * 62;
+  return `<svg class="medal" viewBox="-6 -6 132 132" width="${size}" height="${size}" aria-hidden="true">
+    <defs><linearGradient id="${id}g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:${L ? 'var(--lock-a)' : o.g[0]}"/><stop offset="1" style="stop-color:${L ? 'var(--lock-b)' : o.g[1]}"/></linearGradient><clipPath id="${id}c"><path d="${sh}"/></clipPath></defs>
+    ${L && o.prog != null ? `<circle cx="60" cy="60" r="62" fill="none" style="stroke:var(--line)" stroke-width="4"/><circle cx="60" cy="60" r="62" fill="none" style="stroke:var(--accent)" stroke-width="4" stroke-linecap="round" stroke-dasharray="${(C * Math.max(0.02, Math.min(1, o.prog))).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 60 60)"/>` : ''}
+    <g transform="${L ? 'translate(60 60) scale(.88) translate(-60 -60)' : ''}">
+    <path d="${sh}" fill="url(#${id}g)"/>
+    <g clip-path="url(#${id}c)"><ellipse cx="34" cy="10" rx="80" ry="38" fill="#fff" opacity="${L ? .12 : .22}" transform="rotate(-20 34 10)"/><path d="${sh}" fill="none" stroke="#000" stroke-opacity=".12" stroke-width="6"/></g>
+    <path d="${sh}" fill="none" style="stroke:${ink}" stroke-opacity=".55" stroke-width="2.4" transform="translate(60 60) scale(.84) translate(-60 -60)"/>
+    ${icon}
+    <text x="60" y="${o.unit ? 76 : 74}" text-anchor="middle" style="fill:${ink};font-family:var(--font-num);font-weight:800;font-size:${fs}px">${esc(vs)}</text>
+    ${o.unit ? `<text x="60" y="94" text-anchor="middle" style="fill:${ink};font-size:11.5px;font-weight:700" opacity=".9">${esc(o.unit)}</text>` : ''}
+    </g></svg>`;
+}
+const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${o.isNew ? '<span class="new">新</span>' : ''}${medal(o, 96)}<b>${esc(o.title)}</b><small>${o.tileSub}</small></button>`;
+function awardSheet(o) {
+  const d = document.createElement('dialog');
+  d.className = 'awardsheet';
+  d.innerHTML = `<div class="sh-medal">${medal(o, 168)}</div>
+    <h3>${esc(o.title)}</h3><p class="sh-sub">${o.sub}</p>${o.desc ? `<p class="sh-desc">${o.desc}</p>` : ''}
+    ${o.locked && o.prog != null ? `<div class="sh-prog"><i style="width:${(Math.min(1, o.prog) * 100).toFixed(1)}%"></i></div>` : ''}
+    ${o.viz ? `<div class="sh-viz" style="--c:${o.g[1]};--tile:var(--surface)">${o.viz}</div>` : ''}
+    <div class="bar">${o.go ? `<button class="btn" type="button" data-go="${o.go}">${o.goLabel || '查看这次运动'}</button>` : ''}<button class="btn secondary" type="button" data-close>好的</button></div>`;
+  document.body.appendChild(d);
+  d.addEventListener('click', e => { if (e.target === d || e.target.closest('[data-close],[data-go]')) { d.close(); d.remove(); } });
+  d.addEventListener('cancel', () => d.remove());
+  d.showModal();
 }
 
+// achievements: thresholds that unlock once, with the date they were reached
+function achievements(R) {
+  const fastA = (S.speedUnit === 'mph' ? 15 : 25), fastB = (S.speedUnit === 'mph' ? 20 : 30);
+  const L = [
+    { id: 'd5', title: '5 公里', val: '5K', unit: '累计', shape: 'circle', g: ['#5ee7c6', '#0f9e80'], need: 5000, k: 'dist', desc: '累计走满 5 公里。' },
+    { id: 'd10', title: '10 公里', val: '10K', unit: '累计', shape: 'circle', g: ['#6cc8ff', '#1f72dc'], need: 10000, k: 'dist', desc: '累计走满 10 公里。' },
+    { id: 'd21', title: '半程马拉松', val: '半马', unit: '21.1 km', shape: 'rosette', g: ['#b79bff', '#6a3fe0'], need: 21097.5, k: 'dist', desc: '累计走满一个半程马拉松（21.1 km）。' },
+    { id: 'd42', title: '全程马拉松', val: '全马', unit: '42.2 km', shape: 'rosette', g: ['#ff93c6', '#d92f6d'], need: 42195, k: 'dist', desc: '累计走满一个全程马拉松（42.2 km）。' },
+    { id: 'd100', title: '100 公里', val: '100', unit: 'km', shape: 'oct', g: ['#ffd96a', '#ef8a17'], need: 100000, k: 'dist', desc: '累计走满 100 公里。' },
+    { id: 's100', title: '百次冲刺', val: '100', unit: '次冲刺', icon: IC.bolt, shape: 'hex', g: ['#ffa36b', '#ec4a2a'], need: 100, k: 'spr', desc: '冲刺累计 100 次。' },
+    { id: 's500', title: '五百次冲刺', val: '500', unit: '次冲刺', icon: IC.bolt, shape: 'hex', g: ['#ff7a9c', '#c2185b'], need: 500, k: 'spr', desc: '冲刺累计 500 次。' },
+    { id: 'fa', title: '一阵风', val: String(fastA), unit: spU(), icon: IC.bolt, shape: 'squircle', g: ['#86e3ff', '#2a8ff0'], need: fastA / SPK(), k: 'vmax', desc: `跑出 ${fastA} ${spU()} 以上的速度。` },
+    { id: 'fb', title: '闪电', val: String(fastB), unit: spU(), icon: IC.bolt, shape: 'squircle', g: ['#ffe36e', '#f2a100'], need: fastB / SPK(), k: 'vmax', desc: `跑出 ${fastB} ${spU()} 以上的速度。` },
+    { id: 'w7', title: '一周不落', val: '7', unit: '天连续', icon: IC.flame, shape: 'shield', g: ['#ffbe5c', '#ff6a2b'], need: 7, k: 'streak', desc: '连续 7 天每天都出门运动。' },
+    { id: 'w30', title: '整月不落', val: '30', unit: '天连续', icon: IC.flame, shape: 'shield', g: ['#ff8a5c', '#d32f2f'], need: 30, k: 'streak', desc: '连续 30 天每天都出门运动。' },
+    { id: 'park', title: '狗公园常客', val: '5', unit: '次狗公园', icon: IC.paw, shape: 'rosette', g: ['#8be37a', '#2b9a43'], need: 5, k: 'park', desc: '去狗公园玩 5 次（需要打开「自动识别地点」）。' },
+    { id: 'early', title: '早起的狗', val: '7:30', unit: '前出门', icon: IC.sun, shape: 'circle', g: ['#ffd76e', '#ff9838'], need: 1, k: 'early', desc: '早上 7:30 之前就出门运动。' },
+    { id: 'night', title: '夜游', val: '21:00', unit: '后回家', icon: IC.moon, shape: 'circle', g: ['#8e9bff', '#3b3fb3'], need: 1, k: 'night', desc: '晚上 9 点以后还在外面。' },
+  ];
+  const st = { dist: 0, spr: 0, vmax: 0, park: 0, early: 0, night: 0, streak: 0 }, at = {};
+  const tod = t => { const d = LD(t); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
+  const wdays = new Set(D.acts.filter(isWalk).map(a => dayKey(a.start)));
+  let run = 0, prevK = null;
+  for (const a of D.acts.slice().sort((x, y) => x.start - y.start)) {
+    if (isWalk(a)) {
+      st.dist += a.distance;
+      if (placeOf(a)?.dog) st.park++;
+      const s = tod(a.start), e = tod(a.end);
+      if (s >= 240 && s < 450) st.early++;
+      if (e >= 1260 || (e < 240 && a.end - a.start < 6 * 3600e3)) st.night++;
+      const k = dayKey(a.start);
+      if (k !== prevK) { run = prevK && addDays(prevK, 1) === k && wdays.has(prevK) ? run + 1 : 1; prevK = k; st.streak = Math.max(st.streak, run); }
+    }
+    st.spr += (a.sprints || []).length;
+    if (a.live) st.vmax = Math.max(st.vmax, a.maxV);
+    for (const m of L) if (!at[m.id] && st[m.k] >= m.need) at[m.id] = a.start;
+  }
+  const recent = Date.now() - 3 * 86400e3;
+  return L.map(m => {
+    const have = st[m.k], done = !!at[m.id];
+    const left = m.need - have;
+    const leftTxt = m.k === 'dist' ? `还差 ${distText(left)}` : m.k === 'vmax' ? `最快 ${spdText(have)}` : m.k === 'early' || m.k === 'night' ? '还没有过' : `还差 ${Math.ceil(left)} ${m.k === 'streak' ? '天' : '次'}`;
+    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent,
+      tileSub: done ? `${mdKey(dayKey(at[m.id]))}获得` : leftTxt,
+      sub: done ? `${mdKey(dayKey(at[m.id]))}获得` : `还没获得 · ${leftTxt}` };
+  });
+}
+
+let recRingMode = 'week';
 function viewRecords() {
   const R = records();
   const when = a => `${mdKey(dayKey(a.start))} · ${esc(actName(a))}`;
@@ -1062,47 +1146,93 @@ function viewRecords() {
     root.innerHTML = banners() + head(`${S.name} 的个人最佳`, '纪录') + `<div class="card empty"><b>还没有纪录。</b>遛 ${esc(S.name)} 时在 Tractive 里打开 LIVE，这里会记下最快速度、最长冲刺和最远的一次。</div>`;
     return;
   }
-  let hero = '';
+  const recent = Date.now() - 3 * 86400e3;
+  // personal records as medals
+  const recs = [];
+  const add = (o, a) => recs.push({ ...o, isNew: a && a.start >= recent, tileSub: o.tileSub || (a ? mdKey(dayKey(a.start)) : ''), go: o.go !== undefined ? o.go : a ? `#/walk/${a.start}` : null });
   if (R.speed) {
-    const v = R.speed.v, jog = v / 2.78, bolt = v / (100 / 9.58);
-    const cmp = jog >= 1.5 ? `是人慢跑速度的 ${jog.toFixed(1)} 倍，${bolt >= 1 ? '比博尔特百米的平均速度还快' : `相当于博尔特百米平均速度的 ${Math.round(bolt * 100)}%`}` : '';
-    hero = `<section class="rec-hero"><span class="deco" aria-hidden="true">${IC.paw}${IC.paw}</span>
-      <button class="hero-top" type="button" data-go="#/walk/${R.speed.a.start}"><span class="k">${IC.trophy}最快速度</span>${gauge(v)}
-        <div class="big">${spd(v)}<span class="u">${spU()}</span></div>
-        <div class="s">${when(R.speed.a)}${R.speed.a.maxAt ? ' · ' + hm(R.speed.a.maxAt) : ''}</div>
-        ${cmp ? `<div class="cmp">${cmp}</div>` : ''}</button>
-      ${R.fastest3.length > 1 ? `<ol class="podium">${R.fastest3.map((a, i) => `<li><button type="button" data-go="#/walk/${a.start}"><b class="m${i}">${i + 1}</b><span>${esc(mdKey(dayKey(a.start)))} ${esc(actName(a))}</span><em>${spdText(a.maxV)}</em></button></li>`).join('')}</ol>` : ''}
-    </section>`;
+    const v = R.speed.v, jog = v / 2.78, bolt = v / (100 / 9.58), a = R.speed.a;
+    add({ id: 'r-speed', title: '最快速度', shape: 'rosette', g: ['#ffd96a', '#f0921a'], icon: IC.bolt, val: spd(v), unit: spU(),
+      sub: `${when(a)}${a.maxAt ? ' · ' + hm(a.maxAt) : ''}`,
+      desc: jog >= 1.5 ? `是人慢跑速度的 ${jog.toFixed(1)} 倍，${bolt >= 1 ? '比博尔特百米的平均速度还快' : `相当于博尔特百米平均速度的 ${Math.round(bolt * 100)}%`}。` : '',
+      viz: `<div class="gaugebox">${gauge(v)}</div>` }, a);
   }
-  const tile = (c, icon, label, val, sub, viz, go, wide) => `<button class="rec${wide ? ' wide' : ''}" type="button" style="--c:${c}" ${go ? `data-go="${go}"` : 'disabled'}>
-      <div class="l"><span class="chip">${icon}</span>${label}</div><div class="v">${val}</div><div class="s">${sub}</div>${viz ? `<div class="viz">${viz}</div>` : ''}</button>`;
-  const tiles = [];
-  if (R.sprint) tiles.push(tile('var(--r-dist)', IC.bolt, '最长一次冲刺', distHTML(R.sprint.sp.dist), `连续 ${durText(R.sprint.sp.dur)} · 最快 ${spdText(R.sprint.sp.vmax)}`, vizSprint(R.sprint.a, R.sprint.sp), `#/walk/${R.sprint.a.start}`));
-  if (R.running) tiles.push(tile('var(--r-walk)', IC.run, '一次跑得最多', distHTML(R.running.v), `${(R.running.a.sprints || []).length} 段快跑加起来`, vizRoute(R.running.a, R.running.a.sprints), `#/walk/${R.running.a.start}`));
-  if (R.farthest) tiles.push(tile('var(--r-min)', IC.route, '最远一次', distHTML(R.farthest.v), when(R.farthest.a), vizRoute(R.farthest.a, null), `#/walk/${R.farthest.a.start}`));
-  if (R.longest) tiles.push(tile('var(--gold-ink)', IC.clock, '最长运动时间', durHTML(R.longest.v), when(R.longest.a), vizClock(R.longest.v), `#/walk/${R.longest.a.start}`));
-  if (R.mostSprints) tiles.push(tile('var(--z3)', IC.bolt, '冲刺最多的一次', `${R.mostSprints.v}<span class="u">次</span>`, when(R.mostSprints.a), vizDots(R.mostSprints.v), `#/walk/${R.mostSprints.a.start}`));
-  if (R.bestDay) tiles.push(tile('var(--r-dist)', IC.sun, '一天走得最远', distHTML(R.bestDay.dist), `${mdKey(R.bestDay.key)} ${wdKey(R.bestDay.key)} · ${R.bestDay.walks.length} 次`, ringsSVG(fracs(R.bestDay), 60, 7, 2), `#/today/${R.bestDay.key}`));
-  if (R.streak) tiles.push(tile('var(--r-min)', IC.cal, '连续运动', `${R.streak}<span class="u">天</span>`, R.streakNow === R.streak ? '每天都出门了，还在继续' : R.streakNow ? `现在连续 ${R.streakNow} 天` : '每天至少出门一次', vizStreak(), null, true));
-  const T = R.tot;
-  const journeyCard = `<section class="card"><h2>${esc(S.name)} 的旅程</h2><p class="hint">${T.since ? `从 ${mdKey(dayKey(T.since))}开始，一共走了 ${distText(T.dist)}` : ''}</p>${journey(T.dist)}
-      <div class="chips"><span><b>${T.n}</b> 次运动</span><span>共 <b>${durText(T.sec)}</b></span><span><b>${T.sprints}</b> 次冲刺</span><span>绕操场 <b>${Math.round(T.dist / 400)}</b> 圈</span></div></section>`;
-  // fun facts
+  if (R.sprint) {
+    const { a, sp } = R.sprint, [v, u] = distParts(sp.dist);
+    add({ id: 'r-sprint', title: '最长冲刺', shape: 'hex', g: ['#ff9468', '#e8364f'], icon: IC.run, val: v, unit: u, sub: when(a),
+      desc: `一口气跑了 ${durText(sp.dur)}，一直快过 ${Math.round(E.CFG.sprintV * SPK())} ${spU()}，最快 ${spdText(sp.vmax)}。${sp.dist >= 100 ? `差不多 ${(sp.dist / 100).toFixed(1)} 个百米跑道。` : ''}下面是这段冲刺的路线。`, viz: vizSprint(a, sp) }, a);
+  }
+  if (R.running) {
+    const a = R.running.a, [v, u] = distParts(R.running.v);
+    add({ id: 'r-run', title: '跑得最多', shape: 'shield', g: ['#6fbcff', '#2f5bea'], icon: IC.paw, val: v, unit: u, sub: when(a),
+      desc: `一次运动里 ${(a.sprints || []).length} 段快跑加起来的距离。图上加粗的就是快跑的路段。`, viz: vizRoute(a, a.sprints) }, a);
+  }
+  if (R.farthest) {
+    const a = R.farthest.a, [v, u] = distParts(R.farthest.v);
+    add({ id: 'r-far', title: '最远一次', shape: 'oct', g: ['#62e6a6', '#10996a'], icon: IC.route, val: v, unit: u, sub: when(a),
+      desc: `运动时间 ${durText(a.movingTime)}，平均 ${spdText(a.avgMoving)}。`, viz: vizRoute(a, null) }, a);
+  }
+  if (R.longest) {
+    const a = R.longest.a;
+    add({ id: 'r-long', title: '最长时间', shape: 'circle', g: ['#cfa3ff', '#7448de'], icon: IC.clock, val: String(Math.round(R.longest.v / 60)), unit: '分钟', sub: when(a),
+      desc: `真正在动的时间 ${durText(R.longest.v)}，加上停下来闻闻看看，一共在外面 ${durText(a.duration)}。`, viz: vizClock(R.longest.v) }, a);
+  }
+  if (R.mostSprints) {
+    const a = R.mostSprints.a;
+    add({ id: 'r-many', title: '冲刺最多', shape: 'squircle', g: ['#ff86c0', '#d0307f'], icon: IC.bolt, val: String(R.mostSprints.v), unit: '次冲刺', sub: when(a),
+      desc: `一次运动里冲刺了 ${R.mostSprints.v} 次，每个点是一次。`, viz: vizDots(R.mostSprints.v) }, a);
+  }
+  if (R.bestDay) {
+    const d = R.bestDay, [v, u] = distParts(d.dist);
+    recs.push({ id: 'r-day', title: '一天最远', shape: 'hex', g: ['#56dcee', '#1689bd'], icon: IC.sun, val: v, unit: u, isNew: dayStart(d.key) >= recent - 86400e3,
+      tileSub: mdKey(d.key), sub: `${mdKey(d.key)} ${wdKey(d.key)} · ${d.walks.length} 次运动`, desc: '这一天的三个圆环：距离、活动和散步次数。',
+      viz: `<div class="sh-rings">${ringsSVG(fracs(d), 120, 14, 3)}</div>`, go: `#/today/${d.key}`, goLabel: '查看这一天' });
+  }
+  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', shape: 'shield', g: ['#ffbd59', '#f0532e'], icon: IC.flame, val: String(R.streak), unit: '天连续',
+    tileSub: R.streakNow === R.streak ? '还在继续' : `现在 ${R.streakNow} 天`, sub: R.streakNow === R.streak ? '每天都出门了，还在继续' : R.streakNow ? `现在连续 ${R.streakNow} 天` : '',
+    desc: '每天至少出门运动一次。下面是最近四周，填满的是出门的日子。', viz: vizStreak(), go: null });
+  const ach = achievements(R), got = ach.filter(m => !m.locked);
+  ach.sort((x, y) => (x.locked - y.locked) || (y.prog - x.prog));
+  const awards = new Map([...recs, ...ach].map(o => [o.id, o]));
+
+  // rings: the best of the last 7 days (or today) against the three all-time records
+  let ringsCard = '';
+  const ringsBody = () => {
+    const tk = todayKey(), n = recRingMode === 'today' ? 1 : 7;
+    const days = []; for (let i = 0; i < n; i++) days.push(dayOf(addDays(tk, -i)));
+    const best = (f) => Math.max(0, ...days.map(f));
+    const rows = [
+      ['var(--k1)', '速度', best(d => d.maxV), R.speed.v, spdText],
+      ['var(--k2)', '冲刺', best(d => Math.max(0, ...d.acts.flatMap(a => (a.sprints || []).map(s => s.dist)))), R.sprint ? R.sprint.sp.dist : 0, distText],
+      ['var(--k3)', '一天距离', best(d => d.dist), R.bestDay.dist, distText],
+    ];
+    const fr = rows.map(r => r[3] > 0 ? r[2] / r[3] : 0);
+    return `<div class="kr">${ringsSVG(fr, 156, 17, 3, '', ['var(--k1)', 'var(--k2)', 'var(--k3)'])}<span class="kpaw">${IC.paw}</span></div>
+      <div class="kleg">${rows.map(([c, l, x, rec, fmt], i) => `<div style="--c:${c}"><div class="kl"><i></i>${l}${fr[i] >= 0.999 ? '<span class="kbadge">纪录</span>' : ''}</div><div class="kv">${x > 0 ? fmt(x) : '—'}</div><div class="ks">纪录 ${fmt(rec)} · ${Math.round(Math.min(fr[i], 9.99) * 100)}%</div></div>`).join('')}</div>`;
+  };
+  if (R.speed && R.bestDay) {
+    ringsCard = `<section class="card kcard"><div class="kh"><h2>离纪录有多远</h2><div class="seg" role="group" aria-label="比较范围">${[['week', '最近 7 天'], ['today', '今天']].map(([k, l]) => `<button type="button" data-rmode="${k}" aria-pressed="${recRingMode === k}">${l}</button>`).join('')}</div></div>
+      <div class="kring" id="kring">${ringsBody()}</div>
+      <div class="chips"><span>从 ${mdKey(dayKey(R.tot.since))}起</span><span><b>${R.tot.n}</b> 次运动</span><span><b>${distText(R.tot.dist)}</b></span><span><b>${R.tot.sprints}</b> 次冲刺</span></div></section>`;
+  }
+  // fun facts around the 24-hour dial
   const facts = [];
   const places = new Map();
   D.acts.filter(isWalk).forEach(a => { const p = placeOf(a), w = p ? p.label : nearHome(a) ? '家附近' : null; if (w) places.set(w, (places.get(w) || 0) + 1); });
   const away = [...places].sort((x, y) => y[1] - x[1]).find(([w]) => w !== '家附近');
-  if (away && away[1] >= 2) facts.push(['var(--r-min)', IC.pin, `最常去 <b>${esc(away[0])}</b>，去了 ${away[1]} 次`]);
-  if (R.earliest) facts.push(['var(--gold-ink)', IC.sun, `最早 <b>${hm(R.earliest.a.start)}</b> 就出门了（${esc(mdKey(dayKey(R.earliest.a.start)))}）`]);
-  if (R.latest && R.latest.a !== R.earliest?.a) facts.push(['var(--z3)', IC.moon, `最晚到 <b>${hm(R.latest.a.end)}</b> 才回家（${esc(mdKey(dayKey(R.latest.a.end)))}）`]);
-  if (R.sprint) facts.push(['var(--r-dist)', IC.bolt, `冲刺加起来跑了 <b>${distText(T.sprintDist)}</b>`]);
+  if (away && away[1] >= 2) facts.push(['var(--k2)', IC.pin, `最常去 <b>${esc(away[0])}</b>，去了 ${away[1]} 次`]);
+  if (R.earliest) facts.push(['#f2a100', IC.sun, `最早 <b>${hm(R.earliest.a.start)}</b> 就出门了（${esc(mdKey(dayKey(R.earliest.a.start)))}）`]);
+  if (R.latest && R.latest.a !== R.earliest?.a) facts.push(['#4b52c9', IC.moon, `最晚到 <b>${hm(R.latest.a.end)}</b> 才回家（${esc(mdKey(dayKey(R.latest.a.end)))}）`]);
   const walksAll = D.acts.filter(isWalk);
-  const clockCard = walksAll.length ? `<section class="card"><h2>什么时候出门</h2><p class="hint">每一段蓝色是一次运动，颜色越深的时段出门越多</p>
-      <div class="dialwrap">${dial24(walksAll)}<div class="dialc">${R.slot ? `<small>最常在</small><b>${R.slot[0]}</b><small>${R.slot[1]} / ${T.n} 次</small>` : ''}</div></div>
+  const clockCard = walksAll.length ? `<section class="card"><h2>什么时候出门</h2><p class="hint">每一段是一次运动，颜色越深的时段出门越多</p>
+      <div class="dialwrap">${dial24(walksAll)}<div class="dialc">${R.slot ? `<small>最常在</small><b>${R.slot[0]}</b><small>${R.slot[1]} / ${R.tot.n} 次</small>` : ''}</div></div>
       ${facts.length ? `<ul class="facts">${facts.map(([c, ic, f]) => `<li style="--c:${c}"><span class="chip">${ic}</span><span>${f}</span></li>`).join('')}</ul>` : ''}</section>` : '';
-  root.innerHTML = banners() + head(`${S.name} 的个人最佳`, '纪录') + hero +
-    `<div class="recs">${tiles.join('')}</div>` + journeyCard + clockCard +
+  root.innerHTML = `<div class="rec-wash" aria-hidden="true"></div>` + banners() + head(`${S.name} 的个人最佳`, '纪录') + ringsCard +
+    `<h2 class="sec-title">个人纪录<small>点奖章看详情</small></h2><div class="awards">${recs.map(awardTile).join('')}</div>` +
+    `<h2 class="sec-title">成就<small>已获得 ${got.length} / ${ach.length}</small></h2><div class="awards">${ach.map(awardTile).join('')}</div>` + clockCard +
     `<p class="group-foot" style="margin-top:4px">冲刺：至少 ${E.CFG.sprintMin} 秒都快过 ${Math.round(E.CFG.sprintV * SPK())} ${spU()}，速度要定位和项圈测速都认可。速度纪录只算打开 LIVE 的运动。</p>`;
+  root.querySelectorAll('[data-rmode]').forEach(b => b.addEventListener('click', () => { recRingMode = b.dataset.rmode; root.querySelectorAll('[data-rmode]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#kring').innerHTML = ringsBody(); }));
+  root.querySelectorAll('[data-award]').forEach(b => b.addEventListener('click', () => { const o = awards.get(b.dataset.award); if (o) awardSheet(o); }));
 }
 
 // ---------- view: settings ----------
