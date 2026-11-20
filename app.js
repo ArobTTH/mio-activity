@@ -1070,13 +1070,13 @@ const toneColor = key => (TONE[TONE_OF[key]] || TONE.graphite).lo;
 function medal(o, size) {
   const id = 'c' + (++medalN), L = o.locked, key = o.hue || 'speed', T = TONE[TONE_OF[key]] || TONE.graphite;
   const c = L ? { hi: 'var(--lk-hi)', base: 'var(--lk-base)', lo: 'var(--lk-lo)', ink: 'var(--lk-ink)' } : T;
-  const vs = String(o.val), n = [...vs].length, fs = o.icon ? (n <= 2 ? 34 : n <= 3 ? 30 : n <= 4 ? 25 : 21) : (n <= 2 ? 40 : n <= 3 ? 35 : n <= 4 ? 30 : 24);
+  const vs = String(o.val), n = [...vs].length, fs = o.icon ? (n <= 2 ? 36 : n <= 3 ? 31 : n <= 4 ? 27 : 22) : (n <= 2 ? 40 : n <= 3 ? 35 : n <= 4 ? 30 : 24);
   const unit = o.unitEn || UNIT_EN[o.unit] || (o.unit ? String(o.unit).toUpperCase() : '');
   const sans = `font-family:-apple-system,'SF Pro Display','Helvetica Neue','Segoe UI',Arial,sans-serif`;
   const top = o.inscription || (o.record ? 'PERSONAL BEST' : 'MILESTONE'), bottom = '';
   const arc = (r, a0, a1, sweep) => { const p = a => [60 + r * Math.cos(a * Math.PI / 180), 58 + r * Math.sin(a * Math.PI / 180)]; const [x0, y0] = p(a0), [x1, y1] = p(a1); return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 ${sweep} ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
-  const icon = o.icon ? `<g opacity="${L ? .8 : .92}">${o.icon.replace('<svg ', `<svg x="45" y="${unit ? 16 : 20}" width="30" height="30" style="color:${c.ink}" `)}</g>` : '';
-  const ny = o.icon ? (unit ? 50 : 54) + fs * .72 : 67 + (fs - 33) * .3;
+  const icon = o.icon ? `<g opacity="${L ? .8 : .92}">${o.icon.replace('<svg ', `<svg x="47" y="${unit ? 17 : 21}" width="26" height="26" style="color:${c.ink}" `)}</g>` : '';
+  const ny = o.icon ? (unit ? 48.5 : 52.5) + fs * .72 : 67 + (fs - 33) * .3;
   const C = 2 * Math.PI * 55.5;
   return `<svg class="medal" viewBox="0 0 120 124" width="${size}" height="${Math.round(size * 124 / 120)}" aria-hidden="true">
 <defs>
