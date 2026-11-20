@@ -13,7 +13,9 @@
   --warn-soft: #fbefd9;
   --gold-ink: #8a5a00; --gold-soft: #f6e8c6;
   --hero-a: #2a8a66; --hero-b: #176049; --hero-c: #0d3b2c;
+  --k1: #f2a100; --k2: #ff375f; --k3: #12b3d6; --lock-hi: #fbfbf9; --lock-base: #d6d5cf; --lock-deep: #a3a29b; --lock-ink: #9a9992;
   --k1: #f2a100; --k2: #ff375f; --k3: #12b3d6; --lock-a: #e4e3dd; --lock-b: #c9c8c0; --lock-ink: #8d8b84;
+  --k1: #f2a100; --k2: #ff375f; --k3: #12b3d6; --lock-hi: #fbfbf9; --lock-base: #d6d5cf; --lock-deep: #a3a29b; --lock-ink: #9a9992;
   /* the three daily rings */
   --r-dist: #eb6834;
   --r-min: #1baf7a;
@@ -33,7 +35,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0f0f0e; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #8f8d86;
     --line: #2c2c2a; --line-2: #3d3d3a;
-    --accent: #5cc79b; --accent-ink: #0f0f0e; --accent-soft: #1b3027; --warn-soft: #3a2f17; --gold-ink: #e8b84a; --gold-soft: #3a2f17; --hero-a: #1f6550; --hero-b: #133f31; --hero-c: #0b241c; --k1: #ffc233; --k2: #ff5c86; --k3: #3fd0ec; --lock-a: #3a3a37; --lock-b: #2a2a28; --lock-ink: #77756f;
+    --accent: #5cc79b; --accent-ink: #0f0f0e; --accent-soft: #1b3027; --warn-soft: #3a2f17; --gold-ink: #e8b84a; --gold-soft: #3a2f17; --hero-a: #1f6550; --hero-b: #133f31; --hero-c: #0b241c; --k1: #ffc233; --k2: #ff5c86; --k3: #3fd0ec; --lock-hi: #6a6a66; --lock-base: #3b3b38; --lock-deep: #232321; --lock-ink: #5c5b57;
     --r-dist: #d95926; --r-min: #199e70; --r-walk: #3987e5;
     --z0: #55544f; --z1: #256abf; --z2: #5598e7; --z3: #86b6ef; --z4: #cde2fb;
     --veh: #a3a29b; --gap: #4a4a46;
@@ -47,7 +49,7 @@
 :root[data-theme="dark"] {
   --bg: #0f0f0e; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #8f8d86;
   --line: #2c2c2a; --line-2: #3d3d3a;
-  --accent: #5cc79b; --accent-ink: #0f0f0e; --accent-soft: #1b3027; --warn-soft: #3a2f17; --gold-ink: #e8b84a; --gold-soft: #3a2f17; --hero-a: #1f6550; --hero-b: #133f31; --hero-c: #0b241c; --k1: #ffc233; --k2: #ff5c86; --k3: #3fd0ec; --lock-a: #3a3a37; --lock-b: #2a2a28; --lock-ink: #77756f;
+  --accent: #5cc79b; --accent-ink: #0f0f0e; --accent-soft: #1b3027; --warn-soft: #3a2f17; --gold-ink: #e8b84a; --gold-soft: #3a2f17; --hero-a: #1f6550; --hero-b: #133f31; --hero-c: #0b241c; --k1: #ffc233; --k2: #ff5c86; --k3: #3fd0ec; --lock-hi: #6a6a66; --lock-base: #3b3b38; --lock-deep: #232321; --lock-ink: #5c5b57;
   --r-dist: #d95926; --r-min: #199e70; --r-walk: #3987e5;
   --z0: #55544f; --z1: #256abf; --z2: #5598e7; --z3: #86b6ef; --z4: #cde2fb;
   --veh: #a3a29b; --gap: #4a4a46;
@@ -329,7 +331,7 @@ tr.partial td { color: var(--muted); }
 /* medals */
 .awards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 6px; margin: 4px 0 18px; }
 .award { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; background: none; color: inherit; font: inherit; padding: 4px 0; min-width: 0; -webkit-tap-highlight-color: transparent; }
-.award .medal { width: 96px; height: 96px; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .16)); transition: transform .15s; }
+.award .medal { width: 100px; height: 100px; filter: drop-shadow(0 1.5px 1.5px rgba(0, 0, 0, .18)) drop-shadow(0 8px 10px rgba(0, 0, 0, .14)); transition: transform .15s; }
 .award:active .medal { transform: scale(.94); }
 .award.locked .medal { filter: none; }
 .award b { font-size: 13.5px; font-weight: 700; margin-top: 4px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -339,7 +341,7 @@ tr.partial td { color: var(--muted); }
 
 dialog.awardsheet { border: 0; border-radius: 24px; padding: 22px 18px 18px; background: var(--surface); color: var(--ink); width: calc(100vw - 32px); max-width: 400px; text-align: center; box-shadow: 0 10px 40px rgba(0, 0, 0, .3); }
 dialog.awardsheet::backdrop { background: rgba(0, 0, 0, .45); }
-dialog.awardsheet[open] .sh-medal svg { animation: medalIn .55s cubic-bezier(.2, 1.4, .4, 1) both; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, .2)); }
+dialog.awardsheet[open] .sh-medal svg { animation: medalIn .6s cubic-bezier(.2, 1.4, .4, 1) both; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .2)) drop-shadow(0 14px 18px rgba(0, 0, 0, .18)); }
 @keyframes medalIn { from { transform: scale(.4) rotate(-18deg); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { dialog.awardsheet[open] .sh-medal svg { animation: none; } }
 .sh-medal { display: grid; place-items: center; margin-bottom: 6px; }
