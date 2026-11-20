@@ -11,6 +11,7 @@
   --accent-ink: #ffffff;
   --accent-soft: #e1eee7;
   --warn-soft: #fbefd9;
+  --gold-ink: #8a5a00; --gold-soft: #f6e8c6;
   /* the three daily rings */
   --r-dist: #eb6834;
   --r-min: #1baf7a;
@@ -30,7 +31,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0f0f0e; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #8f8d86;
     --line: #2c2c2a; --line-2: #3d3d3a;
-    --accent: #5cc79b; --accent-ink: #0f0f0e; --accent-soft: #1b3027; --warn-soft: #3a2f17;
+    --accent: #5cc79b; --accent-ink: #0f0f0e; --accent-soft: #1b3027; --warn-soft: #3a2f17; --gold-ink: #e8b84a; --gold-soft: #3a2f17;
     --r-dist: #d95926; --r-min: #199e70; --r-walk: #3987e5;
     --z0: #55544f; --z1: #256abf; --z2: #5598e7; --z3: #86b6ef; --z4: #cde2fb;
     --veh: #a3a29b; --gap: #4a4a46;
@@ -44,7 +45,7 @@
 :root[data-theme="dark"] {
   --bg: #0f0f0e; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #8f8d86;
   --line: #2c2c2a; --line-2: #3d3d3a;
-  --accent: #5cc79b; --accent-ink: #0f0f0e; --accent-soft: #1b3027; --warn-soft: #3a2f17;
+  --accent: #5cc79b; --accent-ink: #0f0f0e; --accent-soft: #1b3027; --warn-soft: #3a2f17; --gold-ink: #e8b84a; --gold-soft: #3a2f17;
   --r-dist: #d95926; --r-min: #199e70; --r-walk: #3987e5;
   --z0: #55544f; --z1: #256abf; --z2: #5598e7; --z3: #86b6ef; --z4: #cde2fb;
   --veh: #a3a29b; --gap: #4a4a46;
@@ -280,7 +281,7 @@ tr.partial td { color: var(--muted); }
   -webkit-backdrop-filter: saturate(1.6) blur(18px); backdrop-filter: saturate(1.6) blur(18px);
   border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) max(8px, env(safe-area-inset-left));
 }
-.tabs div { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+.tabs div { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); }
 .tabs a { display: grid; justify-items: center; gap: 2px; font-size: 11px; color: var(--muted); text-decoration: none; padding: 2px 0; }
 .tabs a svg { width: 26px; height: 26px; }
 .tabs a[aria-current="page"] { color: var(--accent); }
@@ -294,4 +295,29 @@ tr.partial td { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 
 .row[hidden] { display: none; }
+
+/* records */
+.rec-hero { display: block; width: 100%; text-align: left; border: 0; color: inherit; font: inherit; }
+.rec-hero .k, .pill.gold { color: var(--gold-ink); }
+.rec-hero .k { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; }
+.rec-hero .k svg, .pill.gold svg { width: 18px; height: 18px; }
+.rec-hero .big { font-family: var(--font-num); font-weight: 800; font-size: 56px; line-height: 1.05; margin-top: 6px; letter-spacing: -.01em; }
+.rec-hero .big .u { font-family: var(--font-body); font-size: 18px; font-weight: 600; color: var(--ink-2); margin-left: 6px; }
+.rec-hero .s { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.podium { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.podium li { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: baseline; padding: 8px 0 0; font-size: 14px; }
+.podium li span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
+.podium li b { font-family: var(--font-num); color: var(--muted); }
+.podium li:first-child b { color: var(--gold-ink); }
+.podium li em { font-style: normal; font-family: var(--font-num); font-weight: 700; }
+.recs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.rec { background: var(--surface); border: 0; border-radius: 18px; box-shadow: var(--shadow); padding: 14px; text-align: left; color: inherit; font: inherit; min-width: 0; display: flex; flex-direction: column; }
+.rec:disabled { opacity: 1; }
+.rec .l { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.rec .v { font-family: var(--font-num); font-weight: 700; font-size: 26px; line-height: 1.2; margin: 4px 0 2px; }
+.rec .v .u { font-family: var(--font-body); font-size: 13px; font-weight: 500; color: var(--ink-2); margin: 0 2px; }
+.rec .s { font-size: 12px; color: var(--muted); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.facts { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 8px; font-size: 15px; color: var(--ink-2); }
+.facts b { color: var(--ink); }
+.pill.gold { background: var(--gold-soft); display: flex; width: fit-content; margin: 8px 0 0; font-weight: 600; }
 

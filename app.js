@@ -11,7 +11,7 @@ const standalone = navigator.standalone === true || matchMedia('(display-mode: s
 
 // ---------- settings ----------
 const KEY_S = 'mio.settings.v1';
-const DEFAULTS = { name: 'Mio', weight: '', goalKm: 2, goalMin: 60, goalWalks: 2, tz: '', mapProvider: 'esri', gkey: '', base: 'map', hideA2HS: false, ghRepo: 'ArobTTH/mio-data', ghToken: '', lastSync: 0, placeLookup: true };
+const DEFAULTS = { name: 'Mio', weight: '', goalKm: 2, goalMin: 60, goalWalks: 2, tz: '', mapProvider: 'esri', gkey: '', base: 'map', hideA2HS: false, ghRepo: 'ArobTTH/mio-data', ghToken: '', lastSync: 0, placeLookup: true, speedUnit: 'kmh' };
 const KEY_SHA = 'mio.sync.shas.v1';
 const ls = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
@@ -103,7 +103,12 @@ const clock = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math
 const distParts = m => m < 1000 ? [String(Math.round(m)), 'm'] : [(m / 1000).toFixed(m < 10000 ? 2 : 1), 'km'];
 const distHTML = m => { const [v, u] = distParts(m); return `${v}<span class="u">${u}</span>`; };
 const distText = m => distParts(m).join(' ');
-const kmh = v => (v * 3.6).toFixed(1);
+// speeds are m/s inside and shown in km/h or mph (设置 → 速度单位); distances stay metric
+const SPK = () => S.speedUnit === 'mph' ? 2.236936 : 3.6;
+const spU = () => S.speedUnit === 'mph' ? 'mph' : 'km/h';
+const spd = v => (v * SPK()).toFixed(1);
+const spdHTML = v => `${spd(v)}<span class="u">${spU()}</span>`;
+const spdText = v => `${spd(v)} ${spU()}`;
 const pace = v => { if (!(v > 0.05)) return '—'; const s = Math.round(1000 / v); return `${Math.floor(s / 60)}'${pad(s % 60)}"`; };
 const ZC = ['var(--z0)', 'var(--z1)', 'var(--z2)', 'var(--z3)', 'var(--z4)'];
 const zoneColor = z => z === -2 ? 'var(--veh)' : ZC[Math.max(0, z)] || ZC[0];
@@ -277,12 +282,7 @@ function feats(a) {
   let r2 = 0, mid = 0, md = Infinity;
   s.forEach((p, i) => { const d2 = ((p.lon - X) * kx) ** 2 + ((p.lat - Y) * ky) ** 2; r2 += w[i] * d2; if (d2 < md) { md = d2; mid = i; } });
   const rg = Math.sqrt(r2 / W);
-  let bursts = 0, run = 0, counted = false;
-  for (let i = 1; i < n; i++) {
-    const q = s[i];
-    if (q.dense && !q.vehicle && q.v >= 3) { run += (q.t - s[i - 1].t) / 1000; if (!counted && run >= 4) { bursts++; counted = true; } }
-    else { run = 0; counted = false; }
-  }
+  const bursts = (a.sprints || []).length; // ≥ 4 s faster than 10.8 km/h, see engine
   return (a._f = { mid: s[mid], rg, ratio: a.distance / Math.max(rg, 1), run: (a.zoneTime[3] + a.zoneTime[4]) / (a.movingTime || 1), bursts, perH: bursts / Math.max(a.duration / 3600, 0.05) });
 }
 const nearHome = a => !!(D.A && D.A.home) && E.hav(feats(a).mid, D.A.home) < HOME_NEAR;
@@ -424,6 +424,7 @@ const IC = {
   down: '<svg viewBox="0 0 12 12"><path d="M6 10.5 1 3h10z" fill="currentColor"/></svg>',
   flat: '<svg viewBox="0 0 12 12"><rect x="1" y="5" width="10" height="2" rx="1" fill="currentColor"/></svg>',
   edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4.5v1.5A3.5 3.5 0 0 0 8 11M17 6h2.5v1.5A3.5 3.5 0 0 1 16 11M12 14v3.5M8.5 20.5h7M9.5 17.5h5"/></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>',
 };
 
@@ -452,6 +453,7 @@ function render() {
   if (r.view === 'history') return viewHistory(r.arg);
   if (r.view === 'walks') return viewWalks();
   if (r.view === 'walk') return viewWalk(r.arg);
+  if (r.view === 'records') return viewRecords();
   if (r.view === 'settings') return viewSettings();
   return viewToday(r.arg);
 }
@@ -503,7 +505,7 @@ function viewToday(arg) {
   const coverH = d.cover.filter(x => x > 0).length;
   const stats = `<section class="card"><div class="stats">
       <div><div class="l">活动消耗</div><div class="v">${kc != null ? `≈${Math.round(kc)}<span class="u">千卡</span>` : '—'}</div><div class="s">${kc != null ? `按 ${S.weight} kg 估算` : `<button type="button" data-go="#/settings">填写体重</button>后显示`}</div></div>
-      <div><div class="l">最高速度</div><div class="v">${kmh(d.maxV)}<span class="u">km/h</span></div><div class="s">运动记录里的最快时刻</div></div>
+      <div><div class="l">最高速度</div><div class="v">${spdHTML(d.maxV)}</div><div class="s">运动记录里的最快时刻</div></div>
       <div><div class="l">外出</div><div class="v">${durHTML(sum ? sum.time.out || 0 : 0)}</div><div class="s">离开常待地点 100 m 以外</div></div>
       <div><div class="l">有定位的时段</div><div class="v">${coverH}<span class="u">/ 24 小时</span></div><div class="s">${coverH < 20 && hasData(key) ? '追踪器省电或没信号时不记录' : '&nbsp;'}</div></div>
     </div></section>`;
@@ -589,7 +591,7 @@ function viewHistory(arg) {
       ${row('每天距离', (cur.dist / 1000).toFixed(2), 'km', cur.dist, prev.dist, v => (v / 1000).toFixed(2) + ' km')}
       ${row('每天活动', Math.round(cur.sec / 60), '分钟', cur.sec, prev.sec, v => Math.round(v / 60) + ' 分钟')}
       ${row('每天散步', cur.walks.toFixed(1), '次', cur.walks, prev.walks, v => v.toFixed(1) + ' 次')}
-      ${row('散步速度', kmh(cur.v), 'km/h', cur.v, prev.v, v => kmh(v) + ' km/h')}</section>`;
+      ${row('散步速度', spd(cur.v), spU(), cur.v, prev.v, spdText)}</section>`;
   } else {
     const n = [...D.days.keys()].filter(hasData).length;
     trends = `<section class="card"><h2>趋势</h2><p class="hint" style="margin-bottom:0">已有 ${n} 天的数据。最近 7 天里至少有 3 天、之前 4 周里至少有 7 天有数据时，这里会显示变化趋势。</p></section>`;
@@ -667,7 +669,7 @@ function viewWalk(id) {
   let lede;
   if (dense) {
     const fb = feats(a).bursts;
-    lede = (fb >= 3 ? `快跑了 ${fb} 次（每次超过 11 km/h），` : '') + `大部分时间在${E.ZONES[domZ].name}（占移动时间 ${Math.round(zt[domZ] / mv * 100)}%）`;
+    lede = (fb >= 3 ? `快跑了 ${fb} 次（每次超过 ${Math.round(E.CFG.sprintV * SPK())} ${spU()}），` : '') + `大部分时间在${E.ZONES[domZ].name}（占移动时间 ${Math.round(zt[domZ] / mv * 100)}%）`;
     lede += a.pauses.length ? `，途中停下 ${a.pauses.length} 次，最长一次 ${durText(longest)}。` : '，途中没有明显停顿。';
     if (a.vehicleTime) lede += `另有 ${durText(a.vehicleTime)} 在乘车，已从距离和速度里剔除。`;
   } else lede = '这段只有常规定位，点和点之间隔了好几分钟，距离按直线估算，通常比实际走的少，速度和步态只是粗略估计。';
@@ -678,12 +680,12 @@ function viewWalk(id) {
     `<header class="head"><div style="min-width:0"><div class="eyebrow">${esc(`${mdKey(key)} ${wdKey(key)} · ${hm(a.start)}–${hm(a.end)}`)}</div><h1 data-aname="${a.start}">${esc(actName(a))}</h1></div><div class="acts"><button class="icon-btn" type="button" id="renameBtn" aria-label="改名">${IC.edit}</button></div></header>` +
     `<p class="where" data-aplace="${a.start}">${placeLine(a)}</p>` +
     `<span class="pill ${dense ? '' : 'warn'}"><i></i>${dense ? `LIVE · 约 ${Math.round(a.denseMedianDt)} 秒一个点` : `常规定位 · 约 ${Math.round(a.medianDt / 60)} 分钟一个点`}</span>
-    <p class="lede">${esc(lede)}</p>
+    ${recBadges(a)}<p class="lede">${esc(lede)}</p>
     <section class="card"><div class="stats big">
       ${stat('距离', distHTML(a.distance), a.rawDistance > a.distance * 1.08 ? `原始点直接连线 ${distText(a.rawDistance)}，差值是定位抖动` : '&nbsp;')}
       ${stat('运动时间', durHTML(a.movingTime), `总时长 ${durText(a.duration)}`)}
-      ${stat('平均速度', `${kmh(a.avgMoving)}<span class="u">km/h</span>`, `配速 ${pace(a.avgMoving)} /km`)}
-      ${stat('最高速度', `${kmh(a.maxV)}<span class="u">km/h</span>`, a.maxAt ? `在 ${hms(a.maxAt)}` : '&nbsp;')}
+      ${stat('平均速度', spdHTML(a.avgMoving), `配速 ${pace(a.avgMoving)} /km`)}
+      ${stat('最高速度', spdHTML(a.maxV), a.maxAt ? `在 ${hms(a.maxAt)}` : '&nbsp;')}
       ${stat('途中停顿', `${a.pauses.length}<span class="u">次</span>`, a.pauses.length ? `共 ${durText(pauseTot)}` : '停 10 秒以上才算')}
       ${stat('活动消耗', kc != null ? `≈${Math.max(1, Math.round(kc))}<span class="u">千卡</span>` : '—', kc != null ? `按 ${S.weight} kg 估算` : '<button type="button" data-go="#/settings">填写体重</button>后显示')}
       ${stat('海拔变化', a.elev ? `+${Math.round(a.elev.gain)}<span class="u">m</span>` : '—', a.elev ? 'GPS 估算，误差大' : '没有海拔数据')}
@@ -691,7 +693,7 @@ function viewWalk(id) {
     <section class="card" style="padding:8px"><div class="map" id="wMap"></div></section>
     <section class="card"><h2>速度</h2><p class="hint">曲线经过平滑，冲刺的尖峰会被削低；圆点是实测最快的 4 秒。手指在图上左右滑动，地图上会标出 ${esc(S.name)} 当时的位置</p><div class="chart" id="speed"></div><div class="readout" id="speedRO">&nbsp;</div>
       <div class="legend">${E.ZONES.map((z, i) => `<span><i class="line" style="background:${ZC[i]}"></i>${z.name}</span>`).join('')}${a.vehicleTime ? '<span><i class="line" style="background:var(--veh)"></i>乘车</span>' : ''}</div></section>
-    <section class="card"><h2>步态分布</h2><p class="hint">各速度区间累计的时间（km/h）</p>${zonesHTML(a)}</section>
+    <section class="card"><h2>步态分布</h2><p class="hint">各速度区间累计的时间（${spU()}）</p>${zonesHTML(a)}</section>
     <section class="card"><h2>分段</h2><p class="hint">每 ${a.splitLen >= 1000 ? a.splitLen / 1000 + ' km' : a.splitLen + ' m'} 一段，用时包含停顿</p>${splitsHTML(a)}</section>`;
   $('#renameBtn').addEventListener('click', () => renameBox(a));
   let mapApi = null;
@@ -700,7 +702,7 @@ function viewWalk(id) {
 }
 function zonesHTML(a) {
   const zt = a.zoneTime, tot = zt.reduce((s, x) => s + x, 0) || 1, mx = Math.max(...zt) || 1;
-  const rng = i => { const lo = E.ZONES[i].min * 3.6, hi = E.ZONES[i + 1] ? E.ZONES[i + 1].min * 3.6 : null; return i === 0 ? `< ${hi.toFixed(1)}` : hi ? `${lo.toFixed(1)}–${hi.toFixed(1)}` : `> ${lo.toFixed(1)}`; };
+  const rng = i => { const K = SPK(), lo = E.ZONES[i].min * K, hi = E.ZONES[i + 1] ? E.ZONES[i + 1].min * K : null; return i === 0 ? `< ${hi.toFixed(1)}` : hi ? `${lo.toFixed(1)}–${hi.toFixed(1)}` : `> ${lo.toFixed(1)}`; };
   return E.ZONES.map((z, i) => `<div class="zrow"><div class="nm">${z.name}<small>${rng(i)}</small></div><div class="bar"><i style="width:${(zt[i] / mx * 100).toFixed(1)}%;background:${ZC[i]}"></i></div><div class="val"><b>${durText(zt[i])}</b> · ${Math.round(zt[i] / tot * 100)}%</div></div>`).join('') +
     (a.vehicleTime ? `<div class="zrow"><div class="nm">乘车</div><div class="bar"><i style="width:${Math.min(100, a.vehicleTime / mx * 100).toFixed(1)}%;background:var(--veh)"></i></div><div class="val"><b>${durText(a.vehicleTime)}</b></div></div>` : '');
 }
@@ -712,18 +714,18 @@ function splitsHTML(a) {
 function drawSpeed(a, onHover) {
   const el = $('#speed'); if (!el) return;
   const W = Math.max(280, el.clientWidth), H = 200, pl = 30, pr = 34, pt = 20, pb = 24;
-  const s = a.samples, t0 = s[0].t, t1 = s[s.length - 1].t;
-  const vmax = Math.max(5, niceMax(Math.max(a.maxV, ...s.filter(q => !q.vehicle).map(q => q.v)) * 3.6 * 1.1));
+  const s = a.samples, t0 = s[0].t, t1 = s[s.length - 1].t, K = SPK();
+  const vmax = Math.max(5, niceMax(Math.max(a.maxV, ...s.filter(q => !q.vehicle).map(q => q.v)) * K * 1.1));
   const X = t => pl + (t - t0) / Math.max(1, t1 - t0) * (W - pl - pr);
-  const Y = v => pt + (1 - Math.min(v * 3.6, vmax) / vmax) * (H - pt - pb);
+  const Y = v => pt + (1 - Math.min(v * K, vmax) / vmax) * (H - pt - pb);
   let g = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="速度曲线"><g class="axis">`;
   const ts = vmax <= 6 ? 1 : vmax <= 12 ? 2 : vmax <= 25 ? 5 : 10;
-  for (let v = 0; v <= vmax + 1e-6; v += ts) { const y = Y(v / 3.6); g += `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" class="${v ? 'gridl' : 'basel'}"/><text x="${pl - 5}" y="${y + 4}" text-anchor="end">${v}</text>`; }
-  g += `<text x="${pl - 5}" y="9" text-anchor="end" style="font-size:10px">km/h</text>`;
+  for (let v = 0; v <= vmax + 1e-6; v += ts) { const y = Y(v / K); g += `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" class="${v ? 'gridl' : 'basel'}"/><text x="${pl - 5}" y="${y + 4}" text-anchor="end">${v}</text>`; }
+  g += `<text x="${pl - 5}" y="9" text-anchor="end" style="font-size:10px">${spU()}</text>`;
   E.ZONES.forEach((z, i) => {
-    if (!i) return; const lo = z.min * 3.6, hi = Math.min(vmax, (E.ZONES[i + 1] ? E.ZONES[i + 1].min : 99) * 3.6);
-    if (lo >= vmax || Y(lo / 3.6) - Y(hi / 3.6) < 13) return;
-    g += `<text x="${W - pr + 4}" y="${(Y(lo / 3.6) + Y(hi / 3.6)) / 2 + 4}" style="font-size:10.5px">${z.name}</text>`;
+    if (!i) return; const lo = z.min * K, hi = Math.min(vmax, (E.ZONES[i + 1] ? E.ZONES[i + 1].min : 99) * K);
+    if (lo >= vmax || Y(lo / K) - Y(hi / K) < 13) return;
+    g += `<text x="${W - pr + 4}" y="${(Y(lo / K) + Y(hi / K)) / 2 + 4}" style="font-size:10.5px">${z.name}</text>`;
   });
   const dur = (t1 - t0) / 1000;
   const xs = [60, 120, 300, 600, 900, 1800, 3600, 7200].find(q => dur / q <= Math.max(2, (W - pl) / 80)) || 7200;
@@ -741,7 +743,7 @@ function drawSpeed(a, onHover) {
   }
   flush();
   // the curve is smoothed; the dot marks the measured top speed, which can sit above it
-  if (a.maxAt) { const x = X(a.maxAt), y = Y(a.maxV); g += `<circle cx="${x}" cy="${y}" r="4" style="fill:var(--ink);stroke:var(--surface)" stroke-width="2"/><text x="${Math.min(W - pr - 52, x + 7)}" y="${Math.max(pt + 2, y - 7)}" style="fill:var(--ink-2);font-size:11px">最高 ${kmh(a.maxV)}</text>`; }
+  if (a.maxAt) { const x = X(a.maxAt), y = Y(a.maxV); g += `<circle cx="${x}" cy="${y}" r="4" style="fill:var(--ink);stroke:var(--surface)" stroke-width="2"/><text x="${Math.min(W - pr - 52, x + 7)}" y="${Math.max(pt + 2, y - 7)}" style="fill:var(--ink-2);font-size:11px">最高 ${spd(a.maxV)}</text>`; }
   g += `<line id="sX" y1="${pt}" y2="${H - pb}" style="display:none;stroke:var(--ink-2)" stroke-width="1"/><circle id="sDot" r="4.5" style="display:none;fill:var(--ink);stroke:var(--surface)" stroke-width="2"/>`;
   g += `<rect id="sHit" x="${pl}" y="0" width="${W - pl - pr}" height="${H}" fill="transparent"/></svg>`;
   el.innerHTML = g;
@@ -750,7 +752,7 @@ function drawSpeed(a, onHover) {
     const r = svg.getBoundingClientRect(); const t = t0 + ((ev.clientX - r.left) / r.width * W - pl) / (W - pl - pr) * (t1 - t0);
     const q = s[bisect(s, t)], x = X(q.t), y = Y(q.vehicle ? 0 : q.v), z = q.vehicle ? -2 : q.zone;
     xl.setAttribute('x1', x); xl.setAttribute('x2', x); xl.style.display = ''; dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.style.display = '';
-    ro.innerHTML = `<b>${q.vehicle ? '乘车' : kmh(q.v) + ' km/h'}</b>　${zoneName(z)} · ${hms(q.t)} · 已走 ${distText(q.d)}`;
+    ro.innerHTML = `<b>${q.vehicle ? '乘车' : spdText(q.v)}</b>　${zoneName(z)} · ${hms(q.t)} · 已走 ${distText(q.d)}`;
     onHover(q);
   };
   const leave = () => { xl.style.display = 'none'; dot.style.display = 'none'; ro.innerHTML = '&nbsp;'; onHover(null); };
@@ -903,6 +905,105 @@ async function googleMap(el, a) {
   return { hover(q) { if (q) { hov.setPosition(ll(q)); hov.setVisible(true); } else hov.setVisible(false); }, destroy() { g.event.clearInstanceListeners(map); } };
 }
 
+// ---------- records: personal bests and fun facts, from every activity on the phone ----------
+let recCache = null;
+function records() {
+  if (recCache && recCache.acts === D.acts) return recCache;
+  const live = D.acts.filter(a => a.live), walks = D.acts.filter(isWalk);
+  const top = (list, val) => { let best = null, bv = 0; for (const a of list) { const v = val(a); if (v > bv) { bv = v; best = a; } } return best ? { a: best, v: bv } : null; };
+  const sprintsOf = a => a.sprints || [];
+  let longSprint = null;
+  for (const a of live) for (const sp of sprintsOf(a)) if (!longSprint || sp.dist > longSprint.sp.dist) longSprint = { a, sp };
+  const runDist = a => sprintsOf(a).reduce((s, x) => s + x.dist, 0);
+  const R = {
+    acts: D.acts,
+    speed: top(live, a => a.maxV),
+    fastest3: live.filter(a => a.maxV > 0).sort((x, y) => y.maxV - x.maxV).slice(0, 3),
+    sprint: longSprint,
+    farthest: top(walks, a => a.distance),
+    longest: top(walks, a => a.movingTime),
+    running: top(live, runDist),
+    mostSprints: top(live, a => sprintsOf(a).length),
+  };
+  // best day and streaks of days with at least one walk
+  let bestDay = null;
+  for (const d of D.days.values()) if (d.dist > 0 && (!bestDay || d.dist > bestDay.dist)) bestDay = d;
+  R.bestDay = bestDay;
+  const wdays = [...D.days.values()].filter(d => d.walks.length).map(d => d.key).sort();
+  let streak = 0, run = 0, prev = null;
+  for (const k of wdays) { run = prev && addDays(prev, 1) === k ? run + 1 : 1; streak = Math.max(streak, run); prev = k; }
+  const tk = todayKey();
+  let now = 0; for (let k = wdays.includes(tk) ? tk : addDays(tk, -1); wdays.includes(k); k = addDays(k, -1)) now++;
+  R.streak = streak; R.streakNow = now;
+  // totals
+  const sp = live.flatMap(sprintsOf);
+  R.tot = { n: walks.length, dist: walks.reduce((s, a) => s + a.distance, 0), sec: walks.reduce((s, a) => s + a.movingTime, 0), sprints: sp.length, sprintDist: sp.reduce((s, x) => s + x.dist, 0), since: D.acts.length ? D.acts[D.acts.length - 1].start : null };
+  // when Mio goes out
+  const SLOTS = [[5, '清晨'], [8, '上午'], [11, '中午'], [14, '下午'], [17, '傍晚'], [19, '晚上'], [24, '深夜']];
+  const slotOf = t => { const h = hourOf(t); return h < 5 ? '深夜' : SLOTS.find(([e]) => h < e)[1]; };
+  const slots = new Map(); walks.forEach(a => slots.set(slotOf(a.start), (slots.get(slotOf(a.start)) || 0) + 1));
+  R.slot = [...slots].sort((x, y) => y[1] - x[1])[0] || null;
+  const tod = t => { const d = LD(t); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
+  R.earliest = top(walks, a => 1440 - tod(a.start)); R.latest = top(walks, a => tod(a.end) < 240 ? 1440 + tod(a.end) : tod(a.end));
+  return (recCache = R);
+}
+// which records this activity holds (shown on its own page)
+function recBadges(a) {
+  const R = records(), out = [];
+  if (R.speed && R.speed.a === a) out.push('最快速度');
+  if (R.sprint && R.sprint.a === a) out.push('最长冲刺');
+  if (R.farthest && R.farthest.a === a) out.push('最远一次');
+  if (R.longest && R.longest.a === a) out.push('最久一次');
+  if (R.running && R.running.a === a) out.push('跑得最多');
+  if (R.mostSprints && R.mostSprints.a === a) out.push('冲刺最多');
+  return out.length ? `<span class="pill gold">${IC.trophy}纪录：${out.join(' · ')}</span>` : '';
+}
+function viewRecords() {
+  const R = records();
+  const when = a => `${mdKey(dayKey(a.start))} · ${esc(actName(a))}`;
+  if (!R.speed && !R.farthest) {
+    root.innerHTML = banners() + head(`${S.name} 的个人最佳`, '纪录') + `<div class="card empty"><b>还没有纪录。</b>遛 ${esc(S.name)} 时在 Tractive 里打开 LIVE，这里会记下最快速度、最长冲刺和最远的一次。</div>`;
+    return;
+  }
+  const hero = R.speed ? `<button class="card rec-hero" type="button" data-go="#/walk/${R.speed.a.start}">
+      <div class="k">${IC.trophy}最快速度</div>
+      <div class="big">${spd(R.speed.v)}<span class="u">${spU()}</span></div>
+      <div class="s">${when(R.speed.a)}${R.speed.a.maxAt ? ' · ' + hm(R.speed.a.maxAt) : ''}</div>
+      ${R.fastest3.length > 1 ? `<ol class="podium">${R.fastest3.map((a, i) => `<li><b>${i + 1}</b><span>${esc(mdKey(dayKey(a.start)))} ${esc(actName(a))}</span><em>${spdText(a.maxV)}</em></li>`).join('')}</ol>` : ''}
+    </button>` : '';
+  const tile = (label, val, sub, go) => `<button class="rec" type="button" ${go ? `data-go="${go}"` : 'disabled'}><div class="l">${label}</div><div class="v">${val}</div><div class="s">${sub}</div></button>`;
+  const tiles = [];
+  if (R.sprint) tiles.push(tile('最长一次冲刺', distHTML(R.sprint.sp.dist), `连续 ${durText(R.sprint.sp.dur)}，最快 ${spdText(R.sprint.sp.vmax)}<br>${when(R.sprint.a)}`, `#/walk/${R.sprint.a.start}`));
+  if (R.running) tiles.push(tile('一次跑得最多', distHTML(R.running.v), `${(R.running.a.sprints || []).length} 段快跑加起来<br>${when(R.running.a)}`, `#/walk/${R.running.a.start}`));
+  if (R.farthest) tiles.push(tile('最远一次', distHTML(R.farthest.v), when(R.farthest.a), `#/walk/${R.farthest.a.start}`));
+  if (R.longest) tiles.push(tile('最长运动时间', durHTML(R.longest.v), when(R.longest.a), `#/walk/${R.longest.a.start}`));
+  if (R.mostSprints) tiles.push(tile('冲刺最多的一次', `${R.mostSprints.v}<span class="u">次</span>`, when(R.mostSprints.a), `#/walk/${R.mostSprints.a.start}`));
+  if (R.bestDay) tiles.push(tile('一天走得最远', distHTML(R.bestDay.dist), `${mdKey(R.bestDay.key)} ${wdKey(R.bestDay.key)} · ${R.bestDay.walks.length} 次运动`, `#/today/${R.bestDay.key}`));
+  if (R.streak) tiles.push(tile('连续运动', `${R.streak}<span class="u">天</span>`, R.streakNow === R.streak ? '每天都出门了，还在继续' : R.streakNow ? `现在连续 ${R.streakNow} 天` : '每天至少出门运动一次', null));
+  const T = R.tot, laps = Math.round(T.dist / 400);
+  const totals = `<section class="card"><h2>累计</h2><p class="hint">${T.since ? `从 ${mdKey(dayKey(T.since))}开始记录` : ''}</p><div class="stats">
+      <div><div class="l">总距离</div><div class="v">${distHTML(T.dist)}</div><div class="s">${laps >= 2 ? `相当于绕操场跑 ${laps} 圈` : '&nbsp;'}</div></div>
+      <div><div class="l">运动</div><div class="v">${T.n}<span class="u">次</span></div><div class="s">共 ${durText(T.sec)}</div></div>
+      <div><div class="l">冲刺</div><div class="v">${T.sprints}<span class="u">次</span></div><div class="s">${T.sprints ? `加起来 ${distText(T.sprintDist)}` : '&nbsp;'}</div></div>
+      <div><div class="l">平均每次</div><div class="v">${distHTML(T.n ? T.dist / T.n : 0)}</div><div class="s">${T.n ? durText(T.sec / T.n) : '&nbsp;'}</div></div>
+    </div></section>`;
+  // fun facts
+  const facts = [];
+  const places = new Map();
+  D.acts.filter(isWalk).forEach(a => { const p = placeOf(a), w = p ? p.label : nearHome(a) ? '家附近' : null; if (w) places.set(w, (places.get(w) || 0) + 1); });
+  const fav = [...places].sort((x, y) => y[1] - x[1]);
+  const away = fav.find(([w]) => w !== '家附近');
+  if (away && away[1] >= 2) facts.push(`最常去的地方是 <b>${esc(away[0])}</b>，去了 ${away[1]} 次。`);
+  if (R.slot) facts.push(`最常在<b>${R.slot[0]}</b>出门，${R.tot.n} 次里有 ${R.slot[1]} 次。`);
+  if (R.earliest) facts.push(`最早的一次 <b>${hm(R.earliest.a.start)}</b> 就出门了（${esc(mdKey(dayKey(R.earliest.a.start)))}）。`);
+  if (R.latest && R.latest.a !== R.earliest?.a) facts.push(`最晚的一次到 <b>${hm(R.latest.a.end)}</b> 才回家（${esc(mdKey(dayKey(R.latest.a.end)))}）。`);
+  if (R.sprint) facts.push(`最长那次冲刺 ${durText(R.sprint.sp.dur)}跑了 ${distText(R.sprint.sp.dist)}，平均 ${spdText(R.sprint.sp.dist / Math.max(1, R.sprint.sp.dur))}。`);
+  const funCard = facts.length ? `<section class="card"><h2>趣味发现</h2><ul class="facts">${facts.map(f => `<li>${f}</li>`).join('')}</ul></section>` : '';
+  root.innerHTML = banners() + head(`${S.name} 的个人最佳`, '纪录') + hero +
+    `<div class="recs">${tiles.join('')}</div>` + totals + funCard +
+    `<p class="group-foot" style="margin-top:4px">冲刺：至少 ${E.CFG.sprintMin} 秒都快过 ${Math.round(E.CFG.sprintV * SPK())} ${spU()}，速度要定位和项圈测速都认可。速度纪录只算打开 LIVE 的运动。</p>`;
+}
+
 // ---------- view: settings ----------
 function viewSettings() {
   const tzs = (() => { try { return Intl.supportedValuesOf('timeZone'); } catch { return ['Asia/Shanghai', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'UTC']; } })();
@@ -945,6 +1046,7 @@ function viewSettings() {
     </div>
     <p class="group-foot">${DB.ok() ? '数据只保存在这台设备上，不会上传。' : '这个浏览器不允许保存数据（可能是无痕模式），关掉页面后数据会丢失。'}</p>
     <div class="group-title">显示</div><div class="group">
+      <div class="row"><label for="sUnit">速度单位</label><select id="sUnit" style="width:auto"><option value="kmh" ${S.speedUnit !== 'mph' ? 'selected' : ''}>km/h</option><option value="mph" ${S.speedUnit === 'mph' ? 'selected' : ''}>mph</option></select></div>
       <div class="row"><label for="sTz">时区</label><select id="sTz"><option value="">跟随手机（${esc(sysTz)}）</option>${tzs.map(z => `<option value="${esc(z)}" ${S.tz === z ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select></div>
     </div>
     <div class="group-title">说明</div><div class="group notes">
@@ -952,7 +1054,7 @@ function viewSettings() {
       <p><b>手动导入 GPX：</b>用 Safari 打开 Tractive 网页版，在历史轨迹里选好日期导出 GPX，文件会存到「文件」App 的下载里，再回这里点右上角的 + 导入。可以一次选多个文件，重复导入同一天也没关系。</p>
       <p><b>三个圆环：</b>外圈是距离，中圈是活动分钟，内圈是散步次数。活动分钟优先用 Tractive 项圈传感器的数据（在家玩、院子里跑也算），没有时用 GPS 检测到移动的时间。</p>
       <p><b>采样决定细节：</b>Tractive 平时约 10 分钟定位一次，只有 LIVE 模式下才 2 到 4 秒记录一次。距离、速度、分段主要来自 LIVE 记录，所以遛狗时记得打开 LIVE。</p>
-      <p><b>漂移过滤：</b>静止时 GPS 也会在几十米内跳动，这些漂移不计入距离。持续超过 32 km/h 的路段视为乘车，会从活动里整段去掉，活动只从下车后开始算。</p>
+      <p><b>漂移过滤：</b>静止时 GPS 也会在几十米内跳动，这些漂移不计入距离。持续超过 ${Math.round(E.CFG.vehicleV * SPK())} ${spU()} 的路段视为乘车，会从活动里整段去掉，活动只从下车后开始算。</p>
       <p style="margin:0"><b>消耗</b>按 Taylor 等人（1982）的犬类运动能耗公式估算；<b>海拔</b>来自 GPS，误差 10 到 30 m，仅供参考。</p>
     </div>`;
   const num = (id, key, min, max) => $('#' + id).addEventListener('change', e => { const v = parseFloat(e.target.value); if (v >= min && v <= max) { S[key] = v; saveSettings(); } else e.target.value = S[key]; });
@@ -965,6 +1067,7 @@ function viewSettings() {
   $('#sPlace').addEventListener('change', e => { S.placeLookup = e.target.value === '1'; saveSettings(); resolvePlaces(); });
   $('#sRepo').addEventListener('change', e => { S.ghRepo = e.target.value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''); e.target.value = S.ghRepo; saveSettings(); try { localStorage.removeItem(KEY_SHA); } catch { /* ignore */ } });
   $('#sTok').addEventListener('change', e => { S.ghToken = e.target.value.trim(); saveSettings(); if (syncReady()) pullSync({ quiet: false }); });
+  $('#sUnit').addEventListener('change', e => { S.speedUnit = e.target.value === 'mph' ? 'mph' : 'kmh'; saveSettings(); });
   $('#sTz').addEventListener('change', e => { S.tz = e.target.value; saveSettings(); resetTz(); computeDays(); });
   root.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
     const f = D.files.find(x => x.id === b.dataset.del); if (!f) return;

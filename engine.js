@@ -16,6 +16,9 @@ const Engine = (() => {
     anchor: 2,            // m: dense-track hysteresis against jitter
     pauseMin: 10,         // s
     peakWin: 4,           // s: top speed is the fastest stretch at least this long
+    sprintV: 3.0,         // m/s (10.8 km/h): a sprint is running at least this fast...
+    sprintMin: 4,         // s: ...for at least this long
+    sprintKeep: 2.0,      // m/s: one slower step inside a sprint is bridged if still this fast
   };
   const ZONES = [
     { id: 'rest',   name: '休息', min: 0 },
@@ -234,6 +237,28 @@ const Engine = (() => {
       if (best > 0) { maxV = best; maxAt = bestAt; }
     }
 
+    // sprints: runs of dense steps at sprintV or faster. Same idea as top speed: a step counts when both the
+    // raw fixes and the tracker's own reading say so (smoothed speed when there are no readings). One slower
+    // step inside a run is bridged if the dog was still at least trotting.
+    const sprints = [];
+    if (denseDts.length) {
+      let cur = null, lag = null;
+      const close = () => { if (cur && cur.dur >= CFG.sprintMin) sprints.push(cur); cur = null; lag = null; };
+      for (const s of steps) {
+        const i = s.i;
+        if (!s.dense || vehPoint[i] || vehPoint[i - 1]) { close(); continue; }
+        const raw = hav(pts[i - 1], pts[i]) / s.dt, rd = pts[i].spd;
+        const sv = isFinite(rd) ? Math.min(raw, rd) : s.v;
+        if (sv >= CFG.sprintV) {
+          if (!cur) cur = { t0: pts[i - 1].t, t1: pts[i].t, dur: 0, dist: 0, vmax: 0 };
+          if (lag) { cur.dur += lag.dt; cur.dist += lag.d; lag = null; }
+          cur.t1 = pts[i].t; cur.dur += s.dt; cur.dist += sv * s.dt; cur.vmax = Math.max(cur.vmax, sv);
+        } else if (cur && !lag && Math.max(raw, isFinite(rd) ? rd : 0) >= CFG.sprintKeep) lag = { dt: s.dt, d: sv * s.dt };
+        else close();
+      }
+      close();
+    }
+
     // elevation (GPS altitude is noisy: median filter + 5 m hysteresis)
     let elev = null;
     const eleN = pts.filter(p => p.ele != null).length;
@@ -295,7 +320,7 @@ const Engine = (() => {
       start: pts[0].t, end: pts[n - 1].t, duration: t[n - 1] - t[0], n,
       medianDt: median(dts), denseMedianDt: median(denseDts), denseShare,
       distance: total, movingTime: moving, avgMoving: moving > 0 ? total / moving : 0,
-      maxV, maxAt, zoneTime, vehicleTime: vehTime, vehicleDist: vehDist, gapTime,
+      maxV, maxAt, sprints, zoneTime, vehicleTime: vehTime, vehicleDist: vehDist, gapTime,
       pauses, splits, splitLen: L, elev, samples, vsteps: steps.map(s => !!s.drive),
       rawDistance: pts.reduce((a, p, i) => i ? a + hav(pts[i - 1], p) : 0, 0),
     };
