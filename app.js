@@ -1070,13 +1070,13 @@ const toneColor = key => (TONE[TONE_OF[key]] || TONE.graphite).lo;
 function medal(o, size) {
   const id = 'c' + (++medalN), L = o.locked, key = o.hue || 'speed', T = TONE[TONE_OF[key]] || TONE.graphite;
   const c = L ? { hi: 'var(--lk-hi)', base: 'var(--lk-base)', lo: 'var(--lk-lo)', ink: 'var(--lk-ink)' } : T;
-  const vs = String(o.val), n = [...vs].length, fs = n <= 2 ? 38 : n <= 3 ? 33 : n <= 4 ? 28 : 23;
+  const vs = String(o.val), n = [...vs].length, fs = o.icon ? (n <= 2 ? 34 : n <= 3 ? 30 : n <= 4 ? 25 : 21) : (n <= 2 ? 40 : n <= 3 ? 35 : n <= 4 ? 30 : 24);
   const unit = o.unitEn || UNIT_EN[o.unit] || (o.unit ? String(o.unit).toUpperCase() : '');
   const sans = `font-family:-apple-system,'SF Pro Display','Helvetica Neue','Segoe UI',Arial,sans-serif`;
   const top = o.inscription || (o.record ? 'PERSONAL BEST' : 'MILESTONE'), bottom = '';
   const arc = (r, a0, a1, sweep) => { const p = a => [60 + r * Math.cos(a * Math.PI / 180), 58 + r * Math.sin(a * Math.PI / 180)]; const [x0, y0] = p(a0), [x1, y1] = p(a1); return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 ${sweep} ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
-  const icon = o.icon ? `<g opacity="${L ? .8 : .92}">${o.icon.replace('<svg ', `<svg x="49" y="${unit ? 18 : 21}" width="22" height="22" style="color:${c.ink}" `)}</g>` : '';
-  const ny = (o.icon ? 74 : 67) + (fs - 33) * .3;
+  const icon = o.icon ? `<g opacity="${L ? .8 : .92}">${o.icon.replace('<svg ', `<svg x="45" y="${unit ? 16 : 20}" width="30" height="30" style="color:${c.ink}" `)}</g>` : '';
+  const ny = o.icon ? (unit ? 50 : 54) + fs * .72 : 67 + (fs - 33) * .3;
   const C = 2 * Math.PI * 55.5;
   return `<svg class="medal" viewBox="0 0 120 124" width="${size}" height="${Math.round(size * 124 / 120)}" aria-hidden="true">
 <defs>
@@ -1102,7 +1102,7 @@ ${icon}
 <g style="${sans}" text-anchor="middle">
 <text x="60" y="${ny + .9}" font-size="${fs}" style="font-weight:500;fill:#fff" opacity="${L ? .8 : .55}" letter-spacing="-.6">${esc(vs)}</text>
 <text x="60" y="${ny}" font-size="${fs}" style="font-weight:500;fill:${c.ink}" letter-spacing="-.6">${esc(vs)}</text>
-${unit ? `<text x="60" y="${ny + 12.5}" font-size="${unit.length > 6 ? 7.2 : 8.4}" letter-spacing="${unit.length > 6 ? 1.2 : 2}" style="font-weight:500;fill:${c.ink}" opacity=".85">${esc(unit)}</text>` : ''}
+${unit ? `<text x="60" y="${ny + 11.5}" font-size="${unit.length > 6 ? 7.2 : 8.4}" letter-spacing="${unit.length > 6 ? 1.2 : 2}" style="font-weight:500;fill:${c.ink}" opacity=".85">${esc(unit)}</text>` : ''}
 </g>
 </svg>`;
 }
@@ -1116,7 +1116,7 @@ function spinnable(el) {
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
 const dateEn = t => { const d = LD(t); return `${d.getUTCFullYear()} · ${pad(d.getUTCMonth() + 1)} · ${pad(d.getUTCDate())}`; };
-const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 104)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
+const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 110)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
 function awardSheet(o) {
   const d = document.createElement('dialog');
   d.className = 'awardsheet';
