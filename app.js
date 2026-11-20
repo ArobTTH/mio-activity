@@ -1052,12 +1052,12 @@ function dial24(walks) {
 const PAL = {}; // colours are picked per badge below
 const TONE = {
   // clear, bright glazes; the lettering is the same hue, deep and saturated so it reads at a glance
-  graphite: { hi: '#fff3cc', base: '#ffd46e', lo: '#efab2f', ink: '#3d2500' },   // honey
-  oxblood: { hi: '#ffe5de', base: '#ff9f89', lo: '#ee6f57', ink: '#4a0f05' },    // coral
-  terracotta: { hi: '#ffead4', base: '#ffbe80', lo: '#f09345', ink: '#432000' }, // apricot
-  sage: { hi: '#e0f9eb', base: '#8cddb0', lo: '#4cbc7d', ink: '#04321a' },       // mint
-  navy: { hi: '#e6efff', base: '#a3c3ff', lo: '#6890ee', ink: '#0b1d4d' },       // sky
-  ochre: { hi: '#f3ebff', base: '#ccb1ff', lo: '#9c77ef', ink: '#250b57' },      // lilac
+  graphite: { hi: '#fff3cc', base: '#ffd46e', lo: '#efab2f', ink: '#55360a' },   // honey
+  oxblood: { hi: '#ffe5de', base: '#ff9f89', lo: '#ee6f57', ink: '#661d10' },    // coral
+  terracotta: { hi: '#ffead4', base: '#ffbe80', lo: '#f09345', ink: '#5d2e06' }, // apricot
+  sage: { hi: '#e0f9eb', base: '#8cddb0', lo: '#4cbc7d', ink: '#0c4426' },       // mint
+  navy: { hi: '#e6efff', base: '#a3c3ff', lo: '#6890ee', ink: '#182b66' },       // sky
+  ochre: { hi: '#f3ebff', base: '#ccb1ff', lo: '#9c77ef', ink: '#34186f' },      // lilac
 };
 const HUE = {}; // kept for callers
 const TONE_OF = { speed: 'graphite', sprint: 'oxblood', many: 'oxblood', run: 'terracotta', far: 'sage', day: 'sage', long: 'navy', streak: 'ochre',
@@ -1070,12 +1070,12 @@ const toneColor = key => (TONE[TONE_OF[key]] || TONE.graphite).lo;
 function medal(o, size) {
   const id = 'c' + (++medalN), L = o.locked, key = o.hue || 'speed', T = TONE[TONE_OF[key]] || TONE.graphite;
   const c = L ? { hi: 'var(--lk-hi)', base: 'var(--lk-base)', lo: 'var(--lk-lo)', ink: 'var(--lk-ink)' } : T;
-  const vs = String(o.val), n = [...vs].length, fs = n <= 2 ? 46 : n <= 3 ? 40 : n <= 4 ? 33 : 27;
+  const vs = String(o.val), n = [...vs].length, fs = n <= 2 ? 42 : n <= 3 ? 37 : n <= 4 ? 31 : 25;
   const unit = o.unitEn || UNIT_EN[o.unit] || (o.unit ? String(o.unit).toUpperCase() : '');
   const sans = `font-family:-apple-system,'SF Pro Display','Helvetica Neue','Segoe UI',Arial,sans-serif`;
   const top = o.inscription || (o.record ? 'PERSONAL BEST' : 'MILESTONE'), bottom = '';
   const arc = (r, a0, a1, sweep) => { const p = a => [60 + r * Math.cos(a * Math.PI / 180), 58 + r * Math.sin(a * Math.PI / 180)]; const [x0, y0] = p(a0), [x1, y1] = p(a1); return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 ${sweep} ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
-  const icon = o.icon ? `<g opacity=".85">${o.icon.replace('<svg ', `<svg x="52" y="${unit ? 22 : 25}" width="16" height="16" style="color:${c.ink}" `)}</g>` : '';
+  const icon = o.icon ? `<g opacity=".75">${o.icon.replace('<svg ', `<svg x="53" y="${unit ? 23 : 26}" width="14" height="14" style="color:${c.ink}" `)}</g>` : '';
   const ny = (o.icon ? 71 : 67) + (fs - 33) * .25;
   const C = 2 * Math.PI * 55.5;
   return `<svg class="medal" viewBox="0 0 120 124" width="${size}" height="${Math.round(size * 124 / 120)}" aria-hidden="true">
@@ -1100,9 +1100,9 @@ ${bottom ? `<text text-anchor="middle"><textPath href="#${id}b" startOffset="50%
 <circle cx="13.6" cy="58" r=".9"/><circle cx="106.4" cy="58" r=".9"/></g>`}
 ${icon}
 <g style="${sans}" text-anchor="middle">
-<text x="60" y="${ny + .9}" font-size="${fs}" style="font-weight:700;fill:${L ? '#fff' : '#fff'}" opacity="${L ? .8 : .6}" letter-spacing="-.8">${esc(vs)}</text>
-<text x="60" y="${ny}" font-size="${fs}" style="font-weight:700;fill:${c.ink}" letter-spacing="-.8">${esc(vs)}</text>
-${unit ? `<text x="60" y="${ny + 14.5}" font-size="${unit.length > 8 ? 8 : 9.6}" letter-spacing="${unit.length > 8 ? .6 : .9}" style="font-weight:700;fill:${c.ink}" opacity=".88">${esc(unit)}</text>` : ''}
+<text x="60" y="${ny + .9}" font-size="${fs}" style="font-weight:500;fill:#fff" opacity="${L ? .8 : .55}" letter-spacing="-.6">${esc(vs)}</text>
+<text x="60" y="${ny}" font-size="${fs}" style="font-weight:500;fill:${c.ink}" letter-spacing="-.6">${esc(vs)}</text>
+${unit ? `<text x="60" y="${ny + 14}" font-size="${unit.length > 8 ? 7.2 : 8.4}" letter-spacing="${unit.length > 8 ? 1.4 : 2}" style="font-weight:500;fill:${c.ink}" opacity=".85">${esc(unit)}</text>` : ''}
 </g>
 </svg>`;
 }
@@ -1116,7 +1116,7 @@ function spinnable(el) {
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
 const dateEn = t => { const d = LD(t); return `${d.getUTCFullYear()} · ${pad(d.getUTCMonth() + 1)} · ${pad(d.getUTCDate())}`; };
-const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 140)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
+const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 124)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
 function awardSheet(o) {
   const d = document.createElement('dialog');
   d.className = 'awardsheet';
@@ -1174,7 +1174,7 @@ function achievements(R) {
     const have = st[m.k], done = !!at[m.id];
     const left = m.need - have;
     const leftTxt = m.k === 'dist' ? `还差 ${distText(left)}` : m.k === 'vmax' ? `最快 ${spdText(have)}` : m.k === 'early' || m.k === 'night' ? '还没有过' : `还差 ${Math.ceil(left)} ${m.k === 'streak' ? '天' : '次'}`;
-    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent, date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '',
+    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent, date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '',
       tileSub: done ? `${mdKey(dayKey(at[m.id]))}获得` : leftTxt,
       sub: done ? `${mdKey(dayKey(at[m.id]))}获得` : `还没获得 · ${leftTxt}` };
   });
@@ -1221,7 +1221,7 @@ function viewRecords() {
   }
   if (R.mostSprints) {
     const a = R.mostSprints.a;
-    add({ id: 'r-many', title: '冲刺最多', hue: 'many', record: true, icon: IC.bolt, val: String(R.mostSprints.v), unit: '次', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', sub: when(a),
+    add({ id: 'r-many', title: '冲刺最多', hue: 'many', record: true, icon: IC.bolt, val: String(R.mostSprints.v), unit: '次', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', sub: when(a),
       desc: `一次运动里冲刺了 ${R.mostSprints.v} 次，每个点是一次。`, viz: vizDots(R.mostSprints.v) }, a);
   }
   if (R.bestDay) {
@@ -1230,7 +1230,7 @@ function viewRecords() {
       tileSub: mdKey(d.key), date: dateEn(dayStart(d.key) + 43200e3), sub: `${mdKey(d.key)} ${wdKey(d.key)} · ${d.walks.length} 次运动`, desc: '这一天的三个圆环：距离、活动和散步次数。',
       viz: `<div class="sh-rings">${ringsSVG(fracs(d), 120, 14, 3)}</div>`, go: `#/today/${d.key}`, goLabel: '查看这一天' });
   }
-  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', hue: 'streak', record: true, icon: IC.flame, val: String(R.streak), unit: '天', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS',
+  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', hue: 'streak', record: true, icon: IC.flame, val: String(R.streak), unit: '天', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS',
     tileSub: R.streakNow === R.streak ? '还在继续' : `现在 ${R.streakNow} 天`, sub: R.streakNow === R.streak ? '每天都出门了，还在继续' : R.streakNow ? `现在连续 ${R.streakNow} 天` : '',
     desc: '每天至少出门运动一次。下面是最近四周，填满的是出门的日子。', viz: vizStreak(), go: null });
   const ach = achievements(R), got = ach.filter(m => !m.locked);
