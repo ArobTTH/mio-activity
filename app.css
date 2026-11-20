@@ -319,7 +319,7 @@ tr.partial td { color: var(--muted); }
 .kleg { display: grid; gap: 10px; min-width: 0; }
 .kl { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--c); }
 .kl i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
-.kbadge { font-size: 11px; font-weight: 700; color: #fff; background: rgba(255, 255, 255, .14); border-radius: 999px; padding: 1px 7px; }
+.kbadge { font-size: 11px; font-weight: 700; color: var(--gold-ink); background: var(--gold-soft); border-radius: 999px; padding: 1px 7px; }
 .kv { font-family: var(--font-num); font-weight: 800; font-size: 22px; line-height: 1.15; }
 .ks { font-size: 12px; color: var(--muted); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
@@ -348,7 +348,7 @@ dialog.awardsheet h3 { font-size: 22px; font-weight: 800; }
 .sh-viz .dots { justify-content: center; }
 .sh-rings { display: grid; place-items: center; }
 .sh-rings svg { width: 120px; height: 120px; }
-.gaugebox { margin: -12px; padding: 12px 8px 4px; border-radius: 16px; background: linear-gradient(160deg, var(--hero-a), var(--hero-b) 60%, var(--hero-c)); }
+.gaugebox { margin: -12px; padding: 12px 8px 4px; border-radius: 16px; background: #26262a; }
 .gauge { display: block; width: 100%; max-width: 330px; margin: 0 auto; }
 dialog.awardsheet .bar { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
 dialog.awardsheet .bar .btn { flex: 1; }
@@ -373,64 +373,14 @@ dialog.awardsheet .bar .btn { flex: 1; }
 .chip { width: 26px; height: 26px; flex: none; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; }
 .chip svg { width: 15px; height: 15px; }
 
-/* medal: polished steel bezel, one colour of enamel, silver struck glyph. 1u = 1% of the medal */
-.medal { --u: calc(var(--s) / 100); --tilt: 0; position: relative; display: block; width: var(--s); height: var(--s); flex: none; touch-action: pan-y; }
-.m-coin { position: absolute; inset: 0; }
-.medal.lk .m-coin { inset: 8%; --u: calc(var(--s) * .84 / 100); }
-.m-l { position: absolute; border-radius: 50%; }
-.m-rim { inset: 0;
-  background:
-    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 45%),
-    conic-gradient(from calc(200deg + var(--tilt) * 40deg), #4b4e55, #f6f7f9 10%, #a7acb4 20%, #5a5e66 33%, #3c3f45 42%, #b9bec6 55%, #ffffff 63%, #8d939b 74%, #4f535a 86%, #4b4e55);
-  box-shadow: 0 0 0 calc(var(--u) * .6) rgba(0, 0, 0, .6); }
-.medal.gold .m-rim { background:
-    radial-gradient(circle at 50% 18%, rgba(255, 250, 225, .5), rgba(255, 255, 255, 0) 45%),
-    conic-gradient(from calc(200deg + var(--tilt) * 40deg), #6e4a0c, #fff3c4 10%, #d9ab45 20%, #7d5512 33%, #5c3c08 42%, #e3b95a 55%, #fff6d6 63%, #b8862a 74%, #6b4609 86%, #6e4a0c); }
-.m-lip { inset: 11%; background: linear-gradient(to bottom, rgba(0, 0, 0, .75), rgba(0, 0, 0, .35) 45%, rgba(255, 255, 255, .55)); }
-.m-face { inset: 12.5%;
-  background:
-    radial-gradient(circle at 50% 30%, var(--hi) 0%, var(--base) 42%, color-mix(in srgb, var(--base) 45%, var(--deep)) 78%, var(--deep) 100%); }
-.m-gloss { inset: 12.5%; background: radial-gradient(90% 55% at 50% 0%, rgba(255, 255, 255, .38), rgba(255, 255, 255, .06) 60%, rgba(255, 255, 255, 0) 75%); }
-.m-shine { inset: 0; opacity: 0; background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, .55) 50%, transparent 60%); background-size: 260% 100%; background-position: 160% 0; mix-blend-mode: screen; }
-.m-glyph { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-/* silver lettering: a chrome gradient with a horizon line, pressed into the enamel */
-.m-glyph b, .m-glyph i {
-  background: linear-gradient(to bottom, #ffffff 0%, #eef0f3 38%, #a9aeb6 52%, #dfe2e7 70%, #ffffff 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 calc(var(--u) * 1) calc(var(--u) * .4) rgba(0, 0, 0, .5)); }
-.medal.gold .m-glyph b, .medal.gold .m-glyph i { background: linear-gradient(to bottom, #fffbe8 0%, #fbe6a4 38%, #c99a35 52%, #f3d684 70%, #fff6d6 100%); -webkit-background-clip: text; background-clip: text; }
-.m-glyph b { font-family: var(--font-num); font-weight: 800; font-size: calc(var(--u) * var(--fs)); line-height: .95; letter-spacing: -.02em; }
-.m-glyph i { font-style: normal; font-family: var(--font-num); font-weight: 700; font-size: calc(var(--u) * 10); letter-spacing: .06em; margin-top: calc(var(--u) * 2.5); }
-.m-ic { width: calc(var(--u) * 17); height: calc(var(--u) * 17); margin-bottom: calc(var(--u) * 2); color: #eef0f3; filter: drop-shadow(0 calc(var(--u) * 1) calc(var(--u) * .4) rgba(0, 0, 0, .5)); }
-.medal.gold .m-ic { color: #fbe6a4; }
-.m-ic svg { width: 100%; height: 100%; display: block; }
-/* not yet earned: dark graphite, nothing shiny */
-.medal.lk .m-rim { background: radial-gradient(circle at 50% 20%, #48484c, #2c2c2e 70%); box-shadow: none; }
-.medal.lk .m-lip { background: linear-gradient(to bottom, rgba(0, 0, 0, .5), rgba(255, 255, 255, .08)); }
-.medal.lk .m-face { background: radial-gradient(circle at 50% 30%, #2a2a2c, #1c1c1e 75%); }
-.medal.lk .m-gloss { opacity: .25; }
-.medal.lk .m-glyph b, .medal.lk .m-glyph i { background: #48484a; -webkit-background-clip: text; background-clip: text; filter: none; }
-.medal.lk .m-ic { color: #48484a; filter: none; }
-.m-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* badge: plain SVG, sized by its width */
+.medal { display: block; flex: none; overflow: visible; }
 .award .medal { transition: transform .18s cubic-bezier(.3, 1.4, .5, 1); }
 .award:active .medal { transform: scale(.94); }
+.award .pbar { display: block; width: 64px; height: 4px; border-radius: 2px; background: var(--line); margin-top: 6px; overflow: hidden; }
+.award .pbar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+dialog.awardsheet[open] .sh-medal .medal { animation: badgePop .7s cubic-bezier(.2, 1.5, .4, 1) both; cursor: grab; touch-action: pan-y; }
+@keyframes badgePop { from { transform: scale(.3) rotate(-14deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { dialog.awardsheet[open] .sh-medal .medal { animation: none; } }
 
-/* the medal in the detail sheet turns in, catches the light once, and can be turned by hand */
-dialog.awardsheet[open] .sh-medal .medal { animation: medalFlip .9s cubic-bezier(.2, 1.15, .35, 1) both; cursor: grab; }
-dialog.awardsheet[open] .sh-medal .m-shine { animation: medalShine 1.2s .6s ease-out both; }
-@keyframes medalFlip { from { transform: perspective(600px) rotateY(-120deg) scale(.6); opacity: 0; } 55% { opacity: 1; } to { transform: perspective(600px) rotateY(0); opacity: 1; } }
-@keyframes medalShine { 0% { opacity: 1; background-position: 160% 0; } 100% { opacity: 1; background-position: -60% 0; } }
-@media (prefers-reduced-motion: reduce) { dialog.awardsheet[open] .sh-medal .medal, dialog.awardsheet[open] .sh-medal .m-shine { animation: none; } }
-
-/* the records page always looks like the Fitness app: black, with grey cards */
-html[data-rec] body { background: #000; }
-html[data-rec] .card { background: #1c1c1e; box-shadow: none; }
-html[data-rec] .chips span { background: #2c2c2e; }
-html[data-rec] .head .eyebrow { color: #8e8e93; }
-html[data-rec] .sec-title small, html[data-rec] .award > small, html[data-rec] .ks, html[data-rec] .card .hint, html[data-rec] .group-foot { color: #8e8e93; }
-html[data-rec] .award > b { color: #fff; font-weight: 600; }
-html[data-rec] .award.locked > b { color: #8e8e93; }
 .award > small em { font-style: normal; color: #ff375f; font-weight: 700; margin-right: 4px; }
-html[data-rec] dialog.awardsheet { background: #1c1c1e; }
-html[data-rec] .sh-viz { background: #2c2c2e; }
-html[data-rec] .gaugebox { background: #2c2c2e; }
