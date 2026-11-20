@@ -299,9 +299,9 @@ tr.partial td { color: var(--muted); }
 .row[hidden] { display: none; }
 
 /* records */
-:root { --lk-hi: #f5f4f0; --lk-base: #ebe9e3; --lk-lo: #dbd8d0; --lk-ink: #c4c0b5; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --lk-hi: #343436; --lk-base: #2a2a2c; --lk-lo: #202022; --lk-ink: #4a4a4d; } }
-:root[data-theme="dark"] { --lk-hi: #343436; --lk-base: #2a2a2c; --lk-lo: #202022; --lk-ink: #4a4a4d; }
+:root { --lk-hi: #ffffff; --lk-base: #fbfaf8; --lk-lo: #ece9e3; --lk-ink: #bdb8ad; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --lk-hi: #3a3a3d; --lk-base: #2f2f32; --lk-lo: #252528; --lk-ink: #5e5e62; } }
+:root[data-theme="dark"] { --lk-hi: #3a3a3d; --lk-base: #2f2f32; --lk-lo: #252528; --lk-ink: #5e5e62; }
 .pill.gold { background: var(--gold-soft); color: var(--gold-ink); display: flex; width: fit-content; margin: 8px 0 0; font-weight: 600; }
 .pill.gold svg { width: 16px; height: 16px; }
 .rec-wash {
@@ -332,8 +332,8 @@ tr.partial td { color: var(--muted); }
 /* medals */
 .awards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 6px; margin: 4px 0 18px; }
 .award { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; background: none; color: inherit; font: inherit; padding: 4px 0; min-width: 0; -webkit-tap-highlight-color: transparent; }
-.award > b { font-size: 13.5px; font-weight: 700; margin-top: 4px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.award > small { font-size: 11.5px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.award > b { font-size: 15px; font-weight: 700; margin-top: 6px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+.award > small { font-size: 13px; color: var(--ink-2); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .award.locked > b { color: var(--ink-2); }
 .award .new { position: absolute; top: 4px; right: calc(50% - 46px); z-index: 1; font-size: 10px; line-height: 16px; font-weight: 700; color: #fff; background: #ff375f; border-radius: 999px; padding: 0 6px; box-shadow: 0 0 0 2px var(--bg); }
 

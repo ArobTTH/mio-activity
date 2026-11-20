@@ -1051,32 +1051,32 @@ function dial24(walks) {
 // Plain SVG (gradients, paths, text) so Safari and Chrome draw the same thing.
 const PAL = {}; // colours are picked per badge below
 const TONE = {
-  // light glazes: pale, warm, a little chalky; the lettering is the same hue, much deeper
-  graphite: { hi: '#fff7df', base: '#f2dba4', lo: '#d8b76e', ink: '#5c4413' }, // honey champagne
-  oxblood: { hi: '#ffece6', base: '#f6c4b6', lo: '#df9786', ink: '#7c3222' },  // coral
-  terracotta: { hi: '#fff2e5', base: '#f8d1ad', lo: '#e5a87a', ink: '#784016' }, // apricot
-  sage: { hi: '#f2f9f3', base: '#cde5d3', lo: '#9fc6a9', ink: '#2a5336' },     // mint sage
-  navy: { hi: '#f2f5ff', base: '#d0dbf6', lo: '#a3b6e4', ink: '#2b3a6c' },     // mist blue
-  ochre: { hi: '#fffae8', base: '#f6e4ae', lo: '#dfc374', ink: '#5f470d' },    // butter
+  // clear, bright glazes; the lettering is the same hue, deep and saturated so it reads at a glance
+  graphite: { hi: '#fff2c9', base: '#ffd46e', lo: '#efab2f', ink: '#5e3a00' },   // honey
+  oxblood: { hi: '#ffe3dc', base: '#ff9d87', lo: '#ee6f57', ink: '#6e1e10' },    // coral
+  terracotta: { hi: '#ffe8d1', base: '#ffbd7e', lo: '#f09345', ink: '#653003' }, // apricot
+  sage: { hi: '#ddf8e9', base: '#89dcad', lo: '#4cbc7d', ink: '#0b4a29' },       // mint
+  navy: { hi: '#e3edff', base: '#9fc0ff', lo: '#6890ee', ink: '#152d6b' },       // sky
+  ochre: { hi: '#f1e8ff', base: '#c9adff', lo: '#9c77ef', ink: '#351a70' },      // lilac
 };
 const HUE = {}; // kept for callers
 const TONE_OF = { speed: 'graphite', sprint: 'oxblood', many: 'oxblood', run: 'terracotta', far: 'sage', day: 'sage', long: 'navy', streak: 'ochre',
   d5: 'sage', d10: 'sage', d21: 'sage', d42: 'sage', d100: 'sage', s100: 'oxblood', s500: 'oxblood', fa: 'terracotta', fb: 'graphite',
-  w7: 'ochre', w30: 'ochre', park: 'sage', early: 'ochre', night: 'navy' };
-const UNIT_EN = { 'km/h': 'KM/H', mph: 'MPH', m: 'METERS', km: 'KM', '分钟': 'MINUTES', '次': 'TIMES', '天': 'DAYS', '之前': 'EARLY', '之后': 'LATE' };
+  w7: 'ochre', w30: 'ochre', park: 'sage', early: 'graphite', night: 'navy' };
+const UNIT_EN = { 'km/h': 'KM/H', mph: 'MPH', m: 'METERS', km: 'KM', '分钟': 'MIN', '次': 'TIMES', '天': 'DAYS', '之前': 'EARLY', '之后': 'LATE' };
 let medalN = 0;
 const hsl = (h, s, l) => `hsl(${h} ${s}% ${l}%)`;
 const toneColor = key => (TONE[TONE_OF[key]] || TONE.graphite).lo;
 function medal(o, size) {
   const id = 'c' + (++medalN), L = o.locked, key = o.hue || 'speed', T = TONE[TONE_OF[key]] || TONE.graphite;
   const c = L ? { hi: 'var(--lk-hi)', base: 'var(--lk-base)', lo: 'var(--lk-lo)', ink: 'var(--lk-ink)' } : T;
-  const vs = String(o.val), n = [...vs].length, fs = n <= 2 ? 30 : n <= 3 ? 26 : n <= 4 ? 22 : 18.5;
+  const vs = String(o.val), n = [...vs].length, fs = n <= 2 ? 36 : n <= 3 ? 32 : n <= 4 ? 27 : 22;
   const unit = o.unitEn || UNIT_EN[o.unit] || (o.unit ? String(o.unit).toUpperCase() : '');
   const sans = `font-family:-apple-system,'SF Pro Display','Helvetica Neue','Segoe UI',Arial,sans-serif`;
-  const top = o.inscription || (o.record ? 'PERSONAL BEST' : 'MILESTONE'), bottom = o.date || '';
+  const top = o.inscription || (o.record ? 'PERSONAL BEST' : 'MILESTONE'), bottom = '';
   const arc = (r, a0, a1, sweep) => { const p = a => [60 + r * Math.cos(a * Math.PI / 180), 58 + r * Math.sin(a * Math.PI / 180)]; const [x0, y0] = p(a0), [x1, y1] = p(a1); return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 ${sweep} ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
-  const icon = o.icon ? `<g opacity=".8">${o.icon.replace('<svg ', `<svg x="54.5" y="${unit ? 27 : 30}" width="11" height="11" style="color:${c.ink}" `)}</g>` : '';
-  const ny = o.icon ? 67 : 65;
+  const icon = o.icon ? `<g opacity=".9">${o.icon.replace('<svg ', `<svg x="53.5" y="${unit ? 24 : 27}" width="13" height="13" style="color:${c.ink}" `)}</g>` : '';
+  const ny = o.icon ? 70 : 68;
   const C = 2 * Math.PI * 55.5;
   return `<svg class="medal" viewBox="0 0 120 124" width="${size}" height="${Math.round(size * 124 / 120)}" aria-hidden="true">
 <defs>
@@ -1084,7 +1084,7 @@ function medal(o, size) {
 <radialGradient id="${id}f" cx=".4" cy=".3" r=".85"><stop offset="0" style="stop-color:${c.base}"/><stop offset="1" style="stop-color:${c.lo}"/></radialGradient>
 <linearGradient id="${id}e" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="${L ? .7 : .85}"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="${L ? .06 : .12}"/></linearGradient>
 <linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="${L ? .08 : .13}"/><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="${L ? .6 : .75}"/></linearGradient>
-<radialGradient id="${id}g" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#000" stop-opacity="${L ? .1 : .15}"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+<radialGradient id="${id}g" cx=".5" cy=".5" r=".5"><stop offset="0" style="stop-color:${L ? '#000' : c.lo}" stop-opacity="${L ? .07 : .45}"/><stop offset="1" style="stop-color:${L ? '#000' : c.lo}" stop-opacity="0"/></radialGradient>
 <path id="${id}t" d="${arc(45.7, 180, 360, 1)}"/><path id="${id}b" d="${arc(49.3, 180, 0, 0)}"/>
 </defs>
 <ellipse cx="60" cy="113" rx="42" ry="7" fill="url(#${id}g)"/>
@@ -1094,7 +1094,7 @@ ${L && o.prog != null ? `<circle cx="60" cy="58" r="55.5" fill="none" style="str
 <circle cx="60" cy="58" r="43" fill="url(#${id}f)"/>
 <circle cx="60" cy="58" r="43" fill="none" stroke="url(#${id}s)" stroke-width="1.4"/>
 <circle cx="60" cy="58" r="39.2" fill="none" style="stroke:${c.ink}" stroke-opacity="${L ? .5 : .28}" stroke-width=".5"/>
-${L ? '' : `<g style="${sans};font-weight:600;fill:${c.ink}" font-size="5.2" letter-spacing="1.35" opacity=".62">
+${L ? '' : `<g style="${sans};font-weight:600;fill:${c.ink}" font-size="6.2" letter-spacing="1.2" opacity=".85">
 <text text-anchor="middle"><textPath href="#${id}t" startOffset="50%">${esc(top)}</textPath></text>
 ${bottom ? `<text text-anchor="middle"><textPath href="#${id}b" startOffset="50%">${esc(bottom)}</textPath></text>` : ''}
 <circle cx="13.6" cy="58" r=".9"/><circle cx="106.4" cy="58" r=".9"/></g>`}
@@ -1102,7 +1102,7 @@ ${icon}
 <g style="${sans}" text-anchor="middle">
 <text x="60" y="${ny + .9}" font-size="${fs}" style="font-weight:600;fill:${L ? 'var(--lk-lo)' : '#fff'}" opacity="${L ? .9 : .75}" letter-spacing="-.4">${esc(vs)}</text>
 <text x="60" y="${ny}" font-size="${fs}" style="font-weight:600;fill:${c.ink}" letter-spacing="-.4">${esc(vs)}</text>
-${unit ? `<text x="60" y="${ny + 12}" font-size="${unit.length > 10 ? 4.6 : 5.6}" letter-spacing="${unit.length > 10 ? 1 : 1.5}" style="font-weight:600;fill:${c.ink}" opacity=".75">${esc(unit)}</text>` : ''}
+${unit ? `<text x="60" y="${ny + 13}" font-size="${unit.length > 8 ? 6.6 : 7.8}" letter-spacing="${unit.length > 8 ? .8 : 1.1}" style="font-weight:700;fill:${c.ink}" opacity=".9">${esc(unit)}</text>` : ''}
 </g>
 </svg>`;
 }
@@ -1116,7 +1116,7 @@ function spinnable(el) {
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
 const dateEn = t => { const d = LD(t); return `${d.getUTCFullYear()} · ${pad(d.getUTCMonth() + 1)} · ${pad(d.getUTCDate())}`; };
-const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 98)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
+const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 104)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
 function awardSheet(o) {
   const d = document.createElement('dialog');
   d.className = 'awardsheet';
@@ -1138,16 +1138,16 @@ function achievements(R) {
   const L = [
     { id: 'd5', title: '5 公里', val: '5', unit: 'km', icon: IC.route, hue: 'd5', need: 5000, k: 'dist', desc: '累计走满 5 公里。' },
     { id: 'd10', title: '10 公里', val: '10', unit: 'km', icon: IC.route, hue: 'd10', need: 10000, k: 'dist', desc: '累计走满 10 公里。' },
-    { id: 'd21', title: '半程马拉松', val: '21.1', unit: 'km', unitEn: 'HALF MARATHON', hue: 'd21', need: 21097.5, k: 'dist', desc: '累计走满一个半程马拉松（21.1 km）。' },
+    { id: 'd21', title: '半程马拉松', val: '21.1', unit: 'km', unitEn: 'HALF', hue: 'd21', need: 21097.5, k: 'dist', desc: '累计走满一个半程马拉松（21.1 km）。' },
     { id: 'd42', title: '全程马拉松', val: '42.2', unit: 'km', unitEn: 'MARATHON', hue: 'd42', need: 42195, k: 'dist', desc: '累计走满一个全程马拉松（42.2 km）。' },
     { id: 'd100', title: '100 公里', val: '100', unit: 'km', hue: 'd100', need: 100000, k: 'dist', desc: '累计走满 100 公里。' },
     { id: 's100', title: '百次冲刺', val: '100', unit: '次', unitEn: 'SPRINTS', icon: IC.bolt, hue: 's100', need: 100, k: 'spr', desc: '冲刺累计 100 次。' },
     { id: 's500', title: '五百次冲刺', val: '500', unit: '次', unitEn: 'SPRINTS', icon: IC.bolt, hue: 's500', need: 500, k: 'spr', desc: '冲刺累计 500 次。' },
     { id: 'fa', title: '一阵风', val: String(fastA), unit: spU(), icon: IC.bolt, hue: 'fa', need: fastA / SPK(), k: 'vmax', desc: `跑出 ${fastA} ${spU()} 以上的速度。` },
     { id: 'fb', title: '闪电', val: String(fastB), unit: spU(), icon: IC.bolt, hue: 'fb', need: fastB / SPK(), k: 'vmax', desc: `跑出 ${fastB} ${spU()} 以上的速度。` },
-    { id: 'w7', title: '一周不落', val: '7', unit: '天', unitEn: 'DAYS IN A ROW', icon: IC.flame, hue: 'w7', need: 7, k: 'streak', desc: '连续 7 天每天都出门运动。' },
-    { id: 'w30', title: '整月不落', val: '30', unit: '天', unitEn: 'DAYS IN A ROW', icon: IC.flame, hue: 'w30', need: 30, k: 'streak', desc: '连续 30 天每天都出门运动。' },
-    { id: 'park', title: '狗公园常客', val: '5', unit: '次', unitEn: 'PARK VISITS', icon: IC.paw, hue: 'park', need: 5, k: 'park', desc: '去狗公园玩 5 次（需要打开「自动识别地点」）。' },
+    { id: 'w7', title: '一周不落', val: '7', unit: '天', unitEn: 'DAYS', icon: IC.flame, hue: 'w7', need: 7, k: 'streak', desc: '连续 7 天每天都出门运动。' },
+    { id: 'w30', title: '整月不落', val: '30', unit: '天', unitEn: 'DAYS', icon: IC.flame, hue: 'w30', need: 30, k: 'streak', desc: '连续 30 天每天都出门运动。' },
+    { id: 'park', title: '狗公园常客', val: '5', unit: '次', unitEn: 'VISITS', icon: IC.paw, hue: 'park', need: 5, k: 'park', desc: '去狗公园玩 5 次（需要打开「自动识别地点」）。' },
     { id: 'early', title: '早起的狗', val: '7:30', unit: '之前', unitEn: 'EARLY BIRD', icon: IC.sun, hue: 'early', need: 1, k: 'early', desc: '早上 7:30 之前就出门运动。' },
     { id: 'night', title: '夜游', val: '21:00', unit: '之后', unitEn: 'NIGHT OWL', icon: IC.moon, hue: 'night', need: 1, k: 'night', desc: '晚上 9 点以后还在外面。' },
   ];
@@ -1174,7 +1174,7 @@ function achievements(R) {
     const have = st[m.k], done = !!at[m.id];
     const left = m.need - have;
     const leftTxt = m.k === 'dist' ? `还差 ${distText(left)}` : m.k === 'vmax' ? `最快 ${spdText(have)}` : m.k === 'early' || m.k === 'night' ? '还没有过' : `还差 ${Math.ceil(left)} ${m.k === 'streak' ? '天' : '次'}`;
-    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent, date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '',
+    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent, date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '',
       tileSub: done ? `${mdKey(dayKey(at[m.id]))}获得` : leftTxt,
       sub: done ? `${mdKey(dayKey(at[m.id]))}获得` : `还没获得 · ${leftTxt}` };
   });
@@ -1221,7 +1221,7 @@ function viewRecords() {
   }
   if (R.mostSprints) {
     const a = R.mostSprints.a;
-    add({ id: 'r-many', title: '冲刺最多', hue: 'many', record: true, icon: IC.bolt, val: String(R.mostSprints.v), unit: '次', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', sub: when(a),
+    add({ id: 'r-many', title: '冲刺最多', hue: 'many', record: true, icon: IC.bolt, val: String(R.mostSprints.v), unit: '次', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', sub: when(a),
       desc: `一次运动里冲刺了 ${R.mostSprints.v} 次，每个点是一次。`, viz: vizDots(R.mostSprints.v) }, a);
   }
   if (R.bestDay) {
@@ -1230,7 +1230,7 @@ function viewRecords() {
       tileSub: mdKey(d.key), date: dateEn(dayStart(d.key) + 43200e3), sub: `${mdKey(d.key)} ${wdKey(d.key)} · ${d.walks.length} 次运动`, desc: '这一天的三个圆环：距离、活动和散步次数。',
       viz: `<div class="sh-rings">${ringsSVG(fracs(d), 120, 14, 3)}</div>`, go: `#/today/${d.key}`, goLabel: '查看这一天' });
   }
-  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', hue: 'streak', record: true, icon: IC.flame, val: String(R.streak), unit: '天', unitEn: 'DAYS IN A ROW', unitEn: 'DAYS IN A ROW', unitEn: 'DAYS IN A ROW',
+  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', hue: 'streak', record: true, icon: IC.flame, val: String(R.streak), unit: '天', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS',
     tileSub: R.streakNow === R.streak ? '还在继续' : `现在 ${R.streakNow} 天`, sub: R.streakNow === R.streak ? '每天都出门了，还在继续' : R.streakNow ? `现在连续 ${R.streakNow} 天` : '',
     desc: '每天至少出门运动一次。下面是最近四周，填满的是出门的日子。', viz: vizStreak(), go: null });
   const ach = achievements(R), got = ach.filter(m => !m.locked);
