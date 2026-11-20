@@ -1027,7 +1027,7 @@ function gauge(v) {
   g += mark(JOG, '人慢跑') + mark(BOLT, '博尔特');
   const [nx, ny] = P(v, r - 42);
   g += `<line x1="${cx}" y1="${cy}" x2="${f1(nx)}" y2="${f1(ny)}" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="${cx}" cy="${cy}" r="6" fill="#fff"/>`;
-  return `<svg class="gauge" viewBox="-30 -26 ${W + 60} ${H + 30}" role="img" aria-label="最快速度 ${spdText(v)}"><defs><linearGradient id="gGold" x1="0" x2="1"><stop offset="0" stop-color="#ff7a95"/><stop offset="1" stop-color="#e5194a"/></linearGradient></defs>${g}</svg>`;
+  return `<svg class="gauge" viewBox="-30 -26 ${W + 60} ${H + 30}" role="img" aria-label="最快速度 ${spdText(v)}"><defs><linearGradient id="gGold" x1="0" x2="1"><stop offset="0" stop-color="#f1e6cc"/><stop offset="1" stop-color="#b39a6b"/></linearGradient></defs>${g}</svg>`;
 }
 function dial24(walks) {
   // every outing as an arc on a 24-hour clock, midnight at the top
@@ -1046,77 +1046,66 @@ function dial24(walks) {
 }
 
 // ---------- medals ----------
-// Flat illustrated badges drawn as plain SVG (solid fills, simple gradients, paths and text only: no CSS
-// filters or blend tricks), so Safari and Chrome paint them the same. Anatomy: ribbon tails and laurels behind,
-// a thick two-tone rim, a white keyline, a little scene inside, the number with a solid drop, and a banner.
-const PAL = {}; // kept for callers; a badge colour is now just a hue
-const HUE = { speed: 4, sprint: 348, many: 22, run: 212, far: 152, day: 42, long: 268, streak: 14,
-  d5: 162, d10: 196, d21: 230, d42: 284, d100: 44, s100: 24, s500: 346, fa: 200, fb: 46, w7: 16, w30: 0, park: 118, early: 36, night: 240 };
+// Minted coins in matte enamel: one muted colour each, soft light from the upper left, a hairline bevel,
+// a stepped inner field, an inscription around the rim, and the number set quietly in the middle.
+// Plain SVG (gradients, paths, text) so Safari and Chrome draw the same thing.
+const PAL = {}; // colours are picked per badge below
+const TONE = {
+  graphite: { hi: '#4b4e55', base: '#35373c', lo: '#212226', ink: '#e8d9b8' },
+  oxblood: { hi: '#a1504c', base: '#853937', lo: '#5f2526', ink: '#f6e6d8' },
+  terracotta: { hi: '#c77a59', base: '#ad5d3e', lo: '#86432a', ink: '#fbede1' },
+  sage: { hi: '#6d8a74', base: '#536f5c', lo: '#3a5041', ink: '#eef1e4' },
+  navy: { hi: '#4a5a7e', base: '#33415f', lo: '#212b42', ink: '#e7eaf3' },
+  ochre: { hi: '#c9a35a', base: '#ad8640', lo: '#83632a', ink: '#fcf4e2' },
+};
+const HUE = {}; // kept for callers
+const TONE_OF = { speed: 'graphite', sprint: 'oxblood', many: 'oxblood', run: 'terracotta', far: 'sage', day: 'sage', long: 'navy', streak: 'ochre',
+  d5: 'sage', d10: 'sage', d21: 'sage', d42: 'sage', d100: 'sage', s100: 'oxblood', s500: 'oxblood', fa: 'terracotta', fb: 'graphite',
+  w7: 'ochre', w30: 'ochre', park: 'sage', early: 'ochre', night: 'navy' };
+const UNIT_EN = { 'km/h': 'KM/H', mph: 'MPH', m: 'METERS', km: 'KM', '分钟': 'MINUTES', '次': 'TIMES', '天': 'DAYS', '之前': 'EARLY', '之后': 'LATE' };
 let medalN = 0;
 const hsl = (h, s, l) => `hsl(${h} ${s}% ${l}%)`;
-function tones(h, locked) {
-  if (locked) return { r1: '#d9d9dd', r2: '#b9b9bf', sky1: '#f1f1f3', sky2: '#e3e3e7', h1: '#d2d2d7', h2: '#c3c3c9', rib: '#b4b4ba', ribD: '#97979e', ink: '#ffffff', drop: '#a7a7ad', gold1: '#d0d0d5', gold2: '#b9b9bf', acc: '#ffffff' };
-  const y = h > 30 && h < 70; // yellows need darker rims to hold white text
-  return { r1: hsl(h, 82, y ? 50 : 54), r2: hsl(h, 80, y ? 33 : 37), sky1: hsl(h, 92, y ? 62 : 70), sky2: hsl(h, 84, y ? 47 : 55), h1: hsl(h, 70, y ? 40 : 46), h2: hsl(h, 74, y ? 32 : 38),
-    rib: hsl(h, 84, y ? 40 : 45), ribD: hsl(h, 80, y ? 26 : 29), ink: '#ffffff', drop: hsl(h, 78, y ? 22 : 25), gold1: '#ffd65a', gold2: '#f0a51c', acc: '#ffffff' };
-}
-const f2 = n => n.toFixed(1);
-function scene(kind, T, id) {
-  const hills = `<path d="M8 84 Q30 62 52 76 T96 70 T120 78 V110 H0 Z" fill="${T.h1}"/><path d="M0 92 Q26 74 54 88 T112 84 V110 H0 Z" fill="${T.h2}"/>`;
-  const rays = () => { let g = ''; for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, b = a + Math.PI / 16; g += `<path d="M60 58 L${f2(60 + 70 * Math.cos(a))} ${f2(58 + 70 * Math.sin(a))} L${f2(60 + 70 * Math.cos(b))} ${f2(58 + 70 * Math.sin(b))} Z" fill="#fff" opacity=".22"/>`; } return g; };
-  if (kind === 'speed') return `<g fill="#fff" opacity=".5"><rect x="10" y="30" width="34" height="3.4" rx="1.7"/><rect x="18" y="40" width="22" height="3.4" rx="1.7"/><rect x="76" y="70" width="30" height="3.4" rx="1.7"/><rect x="82" y="80" width="20" height="3.4" rx="1.7"/></g>`;
-  if (kind === 'rays') return rays();
-  if (kind === 'track') return hills + `<path d="M48 110 C54 96 70 92 66 84 C62 76 74 72 78 70" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".55"/>`;
-  if (kind === 'sunrise') return `<circle cx="60" cy="86" r="20" fill="#fff" opacity=".75"/>` + hills;
-  if (kind === 'hills') return hills;
-  if (kind === 'park') return hills + `<g fill="${T.h2}"><circle cx="22" cy="70" r="9"/><circle cx="98" cy="66" r="8"/></g><g stroke="${T.drop}" stroke-width="2.4"><path d="M22 78 v10"/><path d="M98 73 v10"/></g>`;
-  if (kind === 'night') return `<rect width="120" height="120" fill="${T.r2}" opacity=".55"/><g fill="#fff"><circle cx="24" cy="30" r="1.6"/><circle cx="36" cy="18" r="1.2"/><circle cx="96" cy="58" r="1.3"/><circle cx="18" cy="56" r="1"/></g>` + hills;
-  return '';
-}
-const SCENE = { speed: 'speed', sprint: 'speed', many: 'speed', run: 'track', far: 'track', day: 'hills', long: 'rays', streak: 'rays',
-  d5: 'track', d10: 'track', d21: 'track', d42: 'track', d100: 'track', s100: 'speed', s500: 'speed', fa: 'speed', fb: 'speed', w7: 'rays', w30: 'rays', park: 'park', early: 'sunrise', night: 'night' };
-function laurel(side, T) {
-  // a branch of leaves following the lower rim
-  let g = '';
-  for (let i = 0; i < 6; i++) {
-    const a = (side < 0 ? 138 + i * 15 : 42 - i * 15) * Math.PI / 180, r = 55;
-    const x = 60 + r * Math.cos(a), y = 56 + r * Math.sin(a);
-    const rot = a * 180 / Math.PI + (side < 0 ? 60 : -60);
-    g += `<ellipse cx="${f2(x)}" cy="${f2(y)}" rx="6.2" ry="2.8" transform="rotate(${f2(rot)} ${f2(x)} ${f2(y)})" fill="${i % 2 ? T.gold2 : T.gold1}"/>`;
-  }
-  return g;
-}
-const star4 = (x, y, r, fill) => `<path d="M${x} ${y - r} Q${x + r * .22} ${y - r * .22} ${x + r} ${y} Q${x + r * .22} ${y + r * .22} ${x} ${y + r} Q${x - r * .22} ${y + r * .22} ${x - r} ${y} Q${x - r * .22} ${y - r * .22} ${x} ${y - r} Z" fill="${fill}"/>`;
+const toneColor = key => TONE_OF[key] === 'graphite' ? '#b39a6b' : (TONE[TONE_OF[key]] || TONE.graphite).base;
 function medal(o, size) {
-  const id = 'b' + (++medalN), L = o.locked, key = o.hue || 'speed', T = tones(HUE[key] ?? 4, L);
-  const rec = o.record && !L;
-  const vs = String(o.val), n = [...vs].length, fs = n <= 2 ? 32 : n <= 3 ? 27 : n <= 4 ? 23 : 19;
-  const font = `font-family:'SF Pro Rounded',ui-rounded,'Arial Rounded MT Bold','PingFang SC','Microsoft YaHei',sans-serif;font-weight:800`;
-  const icon = o.icon ? o.icon.replace('<svg ', `<svg x="51" y="${o.unit ? 23 : 28}" width="18" height="18" style="color:${T.ink}" `) : '';
-  const numY = o.icon ? 64 : 62;
-  return `<svg class="medal" viewBox="0 0 120 130" width="${size}" height="${Math.round(size * 130 / 120)}" aria-hidden="true">
+  const id = 'c' + (++medalN), L = o.locked, key = o.hue || 'speed', T = TONE[TONE_OF[key]] || TONE.graphite;
+  const c = L ? { hi: 'var(--lk-hi)', base: 'var(--lk-base)', lo: 'var(--lk-lo)', ink: 'var(--lk-ink)' } : T;
+  const vs = String(o.val), n = [...vs].length, fs = n <= 2 ? 30 : n <= 3 ? 26 : n <= 4 ? 22 : 18.5;
+  const unit = o.unitEn || UNIT_EN[o.unit] || (o.unit ? String(o.unit).toUpperCase() : '');
+  const sans = `font-family:-apple-system,'SF Pro Display','Helvetica Neue','Segoe UI',Arial,sans-serif`;
+  const top = o.inscription || (o.record ? 'PERSONAL BEST' : 'MILESTONE'), bottom = o.date || '';
+  const arc = (r, a0, a1, sweep) => { const p = a => [60 + r * Math.cos(a * Math.PI / 180), 58 + r * Math.sin(a * Math.PI / 180)]; const [x0, y0] = p(a0), [x1, y1] = p(a1); return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 ${sweep} ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
+  const icon = o.icon ? `<g opacity=".8">${o.icon.replace('<svg ', `<svg x="54.5" y="${unit ? 27 : 30}" width="11" height="11" style="color:${c.ink}" `)}</g>` : '';
+  const ny = o.icon ? 67 : 65;
+  const C = 2 * Math.PI * 55.5;
+  return `<svg class="medal" viewBox="0 0 120 124" width="${size}" height="${Math.round(size * 124 / 120)}" aria-hidden="true">
 <defs>
-<linearGradient id="${id}r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${T.r1}"/><stop offset="1" stop-color="${T.r2}"/></linearGradient>
-<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${T.sky1}"/><stop offset="1" stop-color="${T.sky2}"/></linearGradient>
-<clipPath id="${id}c"><circle cx="60" cy="56" r="40"/></clipPath>
+<radialGradient id="${id}d" cx=".36" cy=".26" r=".9"><stop offset="0" style="stop-color:${c.hi}"/><stop offset=".55" style="stop-color:${c.base}"/><stop offset="1" style="stop-color:${c.lo}"/></radialGradient>
+<radialGradient id="${id}f" cx=".4" cy=".3" r=".85"><stop offset="0" style="stop-color:${c.base}"/><stop offset="1" style="stop-color:${c.lo}"/></radialGradient>
+<linearGradient id="${id}e" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="${L ? .7 : .38}"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="${L ? .06 : .3}"/></linearGradient>
+<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="${L ? .08 : .35}"/><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="${L ? .6 : .22}"/></linearGradient>
+<radialGradient id="${id}g" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#000" stop-opacity="${L ? .1 : .26}"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+<path id="${id}t" d="${arc(45.7, 180, 360, 1)}"/><path id="${id}b" d="${arc(49.3, 180, 0, 0)}"/>
 </defs>
-${o.unit ? `<path d="M36 94 L28 126 L38 120 L44 128 L52 96 Z" fill="${T.ribD}"/><path d="M84 94 L92 126 L82 120 L76 128 L68 96 Z" fill="${T.ribD}"/>` : ''}
-${rec ? laurel(-1, T) + laurel(1, T) : ''}
-<circle cx="60" cy="56" r="50" fill="url(#${id}r)"/>
-<path d="M60 6 a50 50 0 0 1 49.5 43" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="2.5" stroke-linecap="round"/>
-<circle cx="60" cy="56" r="43.5" fill="#fff"/>
-<g clip-path="url(#${id}c)"><rect x="0" y="0" width="120" height="120" fill="url(#${id}s)" transform="translate(0 16)"/><rect x="0" y="0" width="120" height="20" fill="${T.sky1}"/>${scene(SCENE[key] || 'rays', T, id)}</g>
-<g style="${font}" text-anchor="middle">
+<ellipse cx="60" cy="113" rx="42" ry="7" fill="url(#${id}g)"/>
+${L && o.prog != null ? `<circle cx="60" cy="58" r="55.5" fill="none" style="stroke:var(--line)" stroke-width="1.4"/><circle cx="60" cy="58" r="55.5" fill="none" style="stroke:${toneColor(key)}" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="${(C * Math.max(0.02, Math.min(1, o.prog))).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 60 58)"/>` : ''}
+<circle cx="60" cy="58" r="52" fill="url(#${id}d)"/>
+<circle cx="60" cy="58" r="51.4" fill="none" stroke="url(#${id}e)" stroke-width="1.2"/>
+<circle cx="60" cy="58" r="43" fill="url(#${id}f)"/>
+<circle cx="60" cy="58" r="43" fill="none" stroke="url(#${id}s)" stroke-width="1.4"/>
+<circle cx="60" cy="58" r="39.2" fill="none" style="stroke:${c.ink}" stroke-opacity="${L ? .5 : .22}" stroke-width=".5"/>
+${L ? '' : `<g style="${sans};font-weight:600;fill:${c.ink}" font-size="5.2" letter-spacing="1.35" opacity=".72">
+<text text-anchor="middle"><textPath href="#${id}t" startOffset="50%">${esc(top)}</textPath></text>
+${bottom ? `<text text-anchor="middle"><textPath href="#${id}b" startOffset="50%">${esc(bottom)}</textPath></text>` : ''}
+<circle cx="13.6" cy="58" r=".9"/><circle cx="106.4" cy="58" r=".9"/></g>`}
 ${icon}
-<text x="60" y="${numY + 2.6}" font-size="${fs}" fill="${T.drop}" style="${font}">${esc(vs)}</text>
-<text x="60" y="${numY}" font-size="${fs}" fill="${T.ink}" style="${font}">${esc(vs)}</text>
+<g style="${sans}" text-anchor="middle">
+<text x="60" y="${ny + .9}" font-size="${fs}" style="font-weight:600;fill:${L ? 'var(--lk-lo)' : c.lo}" opacity="${L ? .9 : .85}" letter-spacing="-.4">${esc(vs)}</text>
+<text x="60" y="${ny}" font-size="${fs}" style="font-weight:600;fill:${c.ink}" letter-spacing="-.4">${esc(vs)}</text>
+${unit ? `<text x="60" y="${ny + 12}" font-size="${unit.length > 10 ? 4.6 : 5.6}" letter-spacing="${unit.length > 10 ? 1 : 1.5}" style="font-weight:600;fill:${c.ink}" opacity=".75">${esc(unit)}</text>` : ''}
 </g>
-${o.unit ? `<path d="M10 82 H24 V100 H10 L15 91 Z" fill="${T.ribD}"/><path d="M110 82 H96 V100 H110 L105 91 Z" fill="${T.ribD}"/><path d="M18 78 H102 V96 H18 Z" fill="${T.rib}"/><path d="M18 96 L24 100 V96 Z M102 96 L96 100 V96 Z" fill="${T.drop}"/>
-<text x="60" y="91.5" text-anchor="middle" font-size="10.5" fill="#fff" style="${font};letter-spacing:.06em">${esc(o.unit)}</text>` : ''}
-${rec ? star4(103, 12, 5.5, T.gold1) + star4(14, 22, 3.8, T.gold1) : L ? '' : star4(104, 16, 4, '#fff')}
 </svg>`;
 }
-// drag a badge in the detail sheet to turn it a little
+// drag a medal in the detail sheet to turn it a little
 function spinnable(el) {
   let x0 = null;
   const set = (deg, ease) => { el.style.transition = ease ? 'transform .6s cubic-bezier(.2, 1.3, .4, 1)' : 'none'; el.style.transform = `perspective(600px) rotateY(${deg}deg)`; };
@@ -1125,14 +1114,15 @@ function spinnable(el) {
   const end = () => { if (x0 == null) return; x0 = null; set(0, true); };
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
-const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 100)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
+const dateEn = t => { const d = LD(t); return `${d.getUTCFullYear()} · ${pad(d.getUTCMonth() + 1)} · ${pad(d.getUTCDate())}`; };
+const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 98)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
 function awardSheet(o) {
   const d = document.createElement('dialog');
   d.className = 'awardsheet';
   d.innerHTML = `<div class="sh-medal">${medal(o, 176)}</div>
     <h3>${esc(o.title)}</h3><p class="sh-sub">${o.sub}</p>${o.desc ? `<p class="sh-desc">${o.desc}</p>` : ''}
     ${o.locked && o.prog != null ? `<div class="sh-prog"><i style="width:${(Math.min(1, o.prog) * 100).toFixed(1)}%"></i></div>` : ''}
-    ${o.viz ? `<div class="sh-viz" style="--c:${hsl(HUE[o.hue] ?? 4, 72, 48)};--tile:var(--surface)">${o.viz}</div>` : ''}
+    ${o.viz ? `<div class="sh-viz" style="--c:${toneColor(o.hue)};--tile:var(--surface)">${o.viz}</div>` : ''}
     <div class="bar">${o.go ? `<button class="btn" type="button" data-go="${o.go}">${o.goLabel || '查看这次运动'}</button>` : ''}<button class="btn secondary" type="button" data-close>好的</button></div>`;
   document.body.appendChild(d);
   d.addEventListener('click', e => { if (e.target === d || e.target.closest('[data-close],[data-go]')) { d.close(); d.remove(); } });
@@ -1145,20 +1135,20 @@ function awardSheet(o) {
 function achievements(R) {
   const fastA = (S.speedUnit === 'mph' ? 15 : 25), fastB = (S.speedUnit === 'mph' ? 20 : 30);
   const L = [
-    { id: 'd5', title: '5 公里', val: '5K', icon: IC.route, hue: 'd5', need: 5000, k: 'dist', desc: '累计走满 5 公里。' },
-    { id: 'd10', title: '10 公里', val: '10K', icon: IC.route, hue: 'd10', need: 10000, k: 'dist', desc: '累计走满 10 公里。' },
-    { id: 'd21', title: '半程马拉松', val: '半马', unit: '21.1K', hue: 'd21', need: 21097.5, k: 'dist', desc: '累计走满一个半程马拉松（21.1 km）。' },
-    { id: 'd42', title: '全程马拉松', val: '全马', unit: '42.2K', hue: 'd42', need: 42195, k: 'dist', desc: '累计走满一个全程马拉松（42.2 km）。' },
+    { id: 'd5', title: '5 公里', val: '5', unit: 'km', icon: IC.route, hue: 'd5', need: 5000, k: 'dist', desc: '累计走满 5 公里。' },
+    { id: 'd10', title: '10 公里', val: '10', unit: 'km', icon: IC.route, hue: 'd10', need: 10000, k: 'dist', desc: '累计走满 10 公里。' },
+    { id: 'd21', title: '半程马拉松', val: '21.1', unit: 'km', unitEn: 'HALF MARATHON', hue: 'd21', need: 21097.5, k: 'dist', desc: '累计走满一个半程马拉松（21.1 km）。' },
+    { id: 'd42', title: '全程马拉松', val: '42.2', unit: 'km', unitEn: 'MARATHON', hue: 'd42', need: 42195, k: 'dist', desc: '累计走满一个全程马拉松（42.2 km）。' },
     { id: 'd100', title: '100 公里', val: '100', unit: 'km', hue: 'd100', need: 100000, k: 'dist', desc: '累计走满 100 公里。' },
-    { id: 's100', title: '百次冲刺', val: '100', unit: '次', icon: IC.bolt, hue: 's100', need: 100, k: 'spr', desc: '冲刺累计 100 次。' },
-    { id: 's500', title: '五百次冲刺', val: '500', unit: '次', icon: IC.bolt, hue: 's500', need: 500, k: 'spr', desc: '冲刺累计 500 次。' },
+    { id: 's100', title: '百次冲刺', val: '100', unit: '次', unitEn: 'SPRINTS', icon: IC.bolt, hue: 's100', need: 100, k: 'spr', desc: '冲刺累计 100 次。' },
+    { id: 's500', title: '五百次冲刺', val: '500', unit: '次', unitEn: 'SPRINTS', icon: IC.bolt, hue: 's500', need: 500, k: 'spr', desc: '冲刺累计 500 次。' },
     { id: 'fa', title: '一阵风', val: String(fastA), unit: spU(), icon: IC.bolt, hue: 'fa', need: fastA / SPK(), k: 'vmax', desc: `跑出 ${fastA} ${spU()} 以上的速度。` },
     { id: 'fb', title: '闪电', val: String(fastB), unit: spU(), icon: IC.bolt, hue: 'fb', need: fastB / SPK(), k: 'vmax', desc: `跑出 ${fastB} ${spU()} 以上的速度。` },
-    { id: 'w7', title: '一周不落', val: '7', unit: '天', icon: IC.flame, hue: 'w7', need: 7, k: 'streak', desc: '连续 7 天每天都出门运动。' },
-    { id: 'w30', title: '整月不落', val: '30', unit: '天', icon: IC.flame, hue: 'w30', need: 30, k: 'streak', desc: '连续 30 天每天都出门运动。' },
-    { id: 'park', title: '狗公园常客', val: '5', unit: '次', icon: IC.paw, hue: 'park', need: 5, k: 'park', desc: '去狗公园玩 5 次（需要打开「自动识别地点」）。' },
-    { id: 'early', title: '早起的狗', val: '7:30', unit: '之前', icon: IC.sun, hue: 'early', need: 1, k: 'early', desc: '早上 7:30 之前就出门运动。' },
-    { id: 'night', title: '夜游', val: '21:00', unit: '之后', icon: IC.moon, hue: 'night', need: 1, k: 'night', desc: '晚上 9 点以后还在外面。' },
+    { id: 'w7', title: '一周不落', val: '7', unit: '天', unitEn: 'DAYS IN A ROW', icon: IC.flame, hue: 'w7', need: 7, k: 'streak', desc: '连续 7 天每天都出门运动。' },
+    { id: 'w30', title: '整月不落', val: '30', unit: '天', unitEn: 'DAYS IN A ROW', icon: IC.flame, hue: 'w30', need: 30, k: 'streak', desc: '连续 30 天每天都出门运动。' },
+    { id: 'park', title: '狗公园常客', val: '5', unit: '次', unitEn: 'PARK VISITS', icon: IC.paw, hue: 'park', need: 5, k: 'park', desc: '去狗公园玩 5 次（需要打开「自动识别地点」）。' },
+    { id: 'early', title: '早起的狗', val: '7:30', unit: '之前', unitEn: 'EARLY BIRD', icon: IC.sun, hue: 'early', need: 1, k: 'early', desc: '早上 7:30 之前就出门运动。' },
+    { id: 'night', title: '夜游', val: '21:00', unit: '之后', unitEn: 'NIGHT OWL', icon: IC.moon, hue: 'night', need: 1, k: 'night', desc: '晚上 9 点以后还在外面。' },
   ];
   const st = { dist: 0, spr: 0, vmax: 0, park: 0, early: 0, night: 0, streak: 0 }, at = {};
   const tod = t => { const d = LD(t); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
@@ -1183,7 +1173,7 @@ function achievements(R) {
     const have = st[m.k], done = !!at[m.id];
     const left = m.need - have;
     const leftTxt = m.k === 'dist' ? `还差 ${distText(left)}` : m.k === 'vmax' ? `最快 ${spdText(have)}` : m.k === 'early' || m.k === 'night' ? '还没有过' : `还差 ${Math.ceil(left)} ${m.k === 'streak' ? '天' : '次'}`;
-    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent,
+    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent, date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '',
       tileSub: done ? `${mdKey(dayKey(at[m.id]))}获得` : leftTxt,
       sub: done ? `${mdKey(dayKey(at[m.id]))}获得` : `还没获得 · ${leftTxt}` };
   });
@@ -1200,7 +1190,7 @@ function viewRecords() {
   const recent = Date.now() - 3 * 86400e3;
   // personal records as medals
   const recs = [];
-  const add = (o, a) => recs.push({ ...o, isNew: a && a.start >= recent, tileSub: o.tileSub || (a ? mdKey(dayKey(a.start)) : ''), go: o.go !== undefined ? o.go : a ? `#/walk/${a.start}` : null });
+  const add = (o, a) => recs.push({ ...o, date: a ? dateEn(a.start) : '', isNew: a && a.start >= recent, tileSub: o.tileSub || (a ? mdKey(dayKey(a.start)) : ''), go: o.go !== undefined ? o.go : a ? `#/walk/${a.start}` : null });
   if (R.speed) {
     const v = R.speed.v, jog = v / 2.78, bolt = v / (100 / 9.58), a = R.speed.a;
     add({ id: 'r-speed', title: '最快速度', hue: 'speed', record: true, icon: IC.bolt, val: spd(v), unit: spU(),
@@ -1230,16 +1220,16 @@ function viewRecords() {
   }
   if (R.mostSprints) {
     const a = R.mostSprints.a;
-    add({ id: 'r-many', title: '冲刺最多', hue: 'many', record: true, icon: IC.bolt, val: String(R.mostSprints.v), unit: '次', sub: when(a),
+    add({ id: 'r-many', title: '冲刺最多', hue: 'many', record: true, icon: IC.bolt, val: String(R.mostSprints.v), unit: '次', unitEn: 'SPRINTS', unitEn: 'SPRINTS', sub: when(a),
       desc: `一次运动里冲刺了 ${R.mostSprints.v} 次，每个点是一次。`, viz: vizDots(R.mostSprints.v) }, a);
   }
   if (R.bestDay) {
     const d = R.bestDay, [v, u] = distParts(d.dist);
     recs.push({ id: 'r-day', title: '一天最远', hue: 'day', record: true, icon: IC.sun, val: v, unit: u, isNew: dayStart(d.key) >= recent - 86400e3,
-      tileSub: mdKey(d.key), sub: `${mdKey(d.key)} ${wdKey(d.key)} · ${d.walks.length} 次运动`, desc: '这一天的三个圆环：距离、活动和散步次数。',
+      tileSub: mdKey(d.key), date: dateEn(dayStart(d.key) + 43200e3), sub: `${mdKey(d.key)} ${wdKey(d.key)} · ${d.walks.length} 次运动`, desc: '这一天的三个圆环：距离、活动和散步次数。',
       viz: `<div class="sh-rings">${ringsSVG(fracs(d), 120, 14, 3)}</div>`, go: `#/today/${d.key}`, goLabel: '查看这一天' });
   }
-  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', hue: 'streak', record: true, icon: IC.flame, val: String(R.streak), unit: '天',
+  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', hue: 'streak', record: true, icon: IC.flame, val: String(R.streak), unit: '天', unitEn: 'DAYS IN A ROW', unitEn: 'DAYS IN A ROW',
     tileSub: R.streakNow === R.streak ? '还在继续' : `现在 ${R.streakNow} 天`, sub: R.streakNow === R.streak ? '每天都出门了，还在继续' : R.streakNow ? `现在连续 ${R.streakNow} 天` : '',
     desc: '每天至少出门运动一次。下面是最近四周，填满的是出门的日子。', viz: vizStreak(), go: null });
   const ach = achievements(R), got = ach.filter(m => !m.locked);
