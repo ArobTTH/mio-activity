@@ -1116,7 +1116,7 @@ function spinnable(el) {
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
 }
 const dateEn = t => { const d = LD(t); return `${d.getUTCFullYear()} · ${pad(d.getUTCMonth() + 1)} · ${pad(d.getUTCDate())}`; };
-const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 124)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
+const awardTile = o => `<button class="award${o.locked ? ' locked' : ''}" type="button" data-award="${o.id}">${medal(o, 104)}<b>${esc(o.title)}</b><small>${o.isNew ? '<em>新</em>' : ''}${o.tileSub}</small>${o.locked && o.prog != null ? `<span class="pbar"><i style="width:${(Math.max(.03, Math.min(1, o.prog)) * 100).toFixed(0)}%"></i></span>` : ''}</button>`;
 function awardSheet(o) {
   const d = document.createElement('dialog');
   d.className = 'awardsheet';
@@ -1174,7 +1174,7 @@ function achievements(R) {
     const have = st[m.k], done = !!at[m.id];
     const left = m.need - have;
     const leftTxt = m.k === 'dist' ? `还差 ${distText(left)}` : m.k === 'vmax' ? `最快 ${spdText(have)}` : m.k === 'early' || m.k === 'night' ? '还没有过' : `还差 ${Math.ceil(left)} ${m.k === 'streak' ? '天' : '次'}`;
-    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent, date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '',
+    return { ...m, locked: !done, prog: done ? 1 : have / m.need, isNew: done && at[m.id] >= recent, date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '', date: done ? dateEn(at[m.id]) : '',
       tileSub: done ? `${mdKey(dayKey(at[m.id]))}获得` : leftTxt,
       sub: done ? `${mdKey(dayKey(at[m.id]))}获得` : `还没获得 · ${leftTxt}` };
   });
@@ -1221,7 +1221,7 @@ function viewRecords() {
   }
   if (R.mostSprints) {
     const a = R.mostSprints.a;
-    add({ id: 'r-many', title: '冲刺最多', hue: 'many', record: true, icon: IC.bolt, val: String(R.mostSprints.v), unit: '次', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', sub: when(a),
+    add({ id: 'r-many', title: '冲刺最多', hue: 'many', record: true, icon: IC.bolt, val: String(R.mostSprints.v), unit: '次', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', unitEn: 'SPRINTS', sub: when(a),
       desc: `一次运动里冲刺了 ${R.mostSprints.v} 次，每个点是一次。`, viz: vizDots(R.mostSprints.v) }, a);
   }
   if (R.bestDay) {
@@ -1230,7 +1230,7 @@ function viewRecords() {
       tileSub: mdKey(d.key), date: dateEn(dayStart(d.key) + 43200e3), sub: `${mdKey(d.key)} ${wdKey(d.key)} · ${d.walks.length} 次运动`, desc: '这一天的三个圆环：距离、活动和散步次数。',
       viz: `<div class="sh-rings">${ringsSVG(fracs(d), 120, 14, 3)}</div>`, go: `#/today/${d.key}`, goLabel: '查看这一天' });
   }
-  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', hue: 'streak', record: true, icon: IC.flame, val: String(R.streak), unit: '天', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS',
+  if (R.streak) recs.push({ id: 'r-streak', title: '连续运动', hue: 'streak', record: true, icon: IC.flame, val: String(R.streak), unit: '天', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS', unitEn: 'DAYS',
     tileSub: R.streakNow === R.streak ? '还在继续' : `现在 ${R.streakNow} 天`, sub: R.streakNow === R.streak ? '每天都出门了，还在继续' : R.streakNow ? `现在连续 ${R.streakNow} 天` : '',
     desc: '每天至少出门运动一次。下面是最近四周，填满的是出门的日子。', viz: vizStreak(), go: null });
   const ach = achievements(R), got = ach.filter(m => !m.locked);
